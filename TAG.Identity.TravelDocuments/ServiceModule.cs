@@ -1,12 +1,11 @@
 ﻿using Paiwise;
 using System;
-using System.Collections.Generic;
 using System.Threading.Tasks;
 using Waher.Events;
 using Waher.IoTGateway;
 using Waher.Runtime.Inventory;
 
-namespace TAG.Identity.Template
+namespace TAG.Identity.TravelDocuments
 {
 	/// <summary>
 	/// Service Module template hosting an Identity Authenticator Service, working to verify, accept, reject or defer identity applications made 
@@ -26,7 +25,7 @@ namespace TAG.Identity.Template
 		/// <summary>
 		/// Users are required to have this privilege in order to access this service via the Admin interface.
 		/// </summary>
-		internal const string RequiredPrivilege = "Admin.Identity.Template";
+		internal const string RequiredPrivilege = "Admin.Identity.TravelDocuments";
 
 		/// <summary>
 		/// Service Module template hosting the service within the TAG Neuron(R).
@@ -52,9 +51,6 @@ namespace TAG.Identity.Template
 		public Task Start()
 		{
 			running = true;
-
-			Log.Debug("Template Identity Authenticator started."); // TODO: Remove when proper Start method implemented.
-
 			return Task.CompletedTask;
 		}
 
@@ -64,9 +60,6 @@ namespace TAG.Identity.Template
 		public Task Stop()
 		{
 			running = false;
-
-			Log.Debug("Template Identity Authenticator stopped."); // TODO: Remove when proper Stop method implemented.
-
 			return Task.CompletedTask;
 		}
 
@@ -82,7 +75,7 @@ namespace TAG.Identity.Template
 		{
 			return Task.FromResult(new IConfigurablePage[]
 				{
-					new ConfigurablePage("Identity Authenticator Template", "/TemplateIdentity/IdentityTemplate.md", RequiredPrivilege)
+					new ConfigurablePage("Travel Documents Authenticator", "/TravelDocuments/TravelDocuments.md", RequiredPrivilege)
 				});
 		}
 
