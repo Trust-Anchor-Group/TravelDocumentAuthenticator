@@ -19,7 +19,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Paiwise" Version="3.1.0" />
+    <PackageReference Include="Paiwise" Version="3.1.1" />
     <PackageReference Include="Waher.Content" Version="3.4.7" />
     <PackageReference Include="Waher.Events" Version="1.4.7" />
     <PackageReference Include="Waher.IoTGateway" Version="3.6.0" />
