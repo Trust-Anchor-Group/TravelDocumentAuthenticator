@@ -5,6 +5,7 @@ using Paiwise;
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Text;
 using System.Threading.Tasks;
 using System.Xml;
 using Waher.Events;
@@ -95,13 +96,13 @@ namespace TAG.Identity.TravelDocuments
 		/// </summary>
 		/// <param name="Object">Object</param>
 		/// <returns>How well objects of this type are supported.</returns>
-		public Grade Supports(IIdentityApplication Identity)
+		public Grade Supports(IIdentityApplication Application)
 		{
-			string PreviewId = GetPreviewId(Identity);
+			string PreviewId = GetPreviewId(Application);
 			if (string.IsNullOrEmpty(PreviewId))
 				return Grade.NotAtAll;
 
-			KeyValuePair<XmlDocument, DocumentInformation> P = GetNfcDocument(Identity);
+			KeyValuePair<XmlDocument, DocumentInformation> P = GetNfcDocument(Application);
 
 			if (P.Key is null || P.Value is null)
 				return Grade.NotAtAll;
@@ -157,6 +158,10 @@ namespace TAG.Identity.TravelDocuments
 		{
 			try
 			{
+				string PreviewId = GetPreviewId(Application);
+				if (string.IsNullOrEmpty(PreviewId))
+					return;
+
 				KeyValuePair<XmlDocument, DocumentInformation> P = GetNfcDocument(Application);
 				XmlDocument Nfc = P.Key;
 				DocumentInformation DocInfo = P.Value;
@@ -170,11 +175,15 @@ namespace TAG.Identity.TravelDocuments
 				try
 				{
 					IsoDepReplay Replay = new(Nfc);
-					using TravelDocumentsClient Client = new(Replay, Replay.DocumentInfo, null);
+					byte[] LocalKeySeed = Encoding.UTF8.GetBytes(PreviewId);
+					using TravelDocumentsClient Client = new(Replay, Replay.DocumentInfo, LocalKeySeed);
 
 					AuthenticateResult AuthResult = await Client.Authenticate();
 					if (AuthResult != AuthenticateResult.Success)
-						throw new Exception("Unable to authenticate NFC document: " + AuthResult.ToString());
+					{
+						FailAll(Application, "Unable to authenticate NFC document: " + AuthResult.ToString());
+						return;
+					}
 
 					DocumentInformation DocInfo2 = null;
 
@@ -196,35 +205,261 @@ namespace TAG.Identity.TravelDocuments
 
 					ReadTravelDocumentResult Result = await Client.ReadTravelDocument(OnboardingNeuron);
 					if (Result != ReadTravelDocumentResult.Success)
-						throw new Exception("Unable to read embedded Travel Document: " + Result.ToString());
+					{
+						FailAll(Application, "Unable to read embedded Travel Document: " + Result.ToString());
+						return;
+					}
 
 					if (DocInfo is null)
-						throw new Exception("MRZ not available in embedded Travel Document.");
+					{
+						FailAll(Application, "MRZ not available in embedded Travel Document.");
+						return;
+					}
 
 					if (DocInfo.MRZ_Information.Replace("\n", string.Empty).Replace("\r", string.Empty) !=
 						DocInfo2.MRZ_Information.Replace("\n", string.Empty).Replace("\r", string.Empty))
 					{
-						throw new Exception("MRZ provided in authentication not same as MRZ encoded in Travel Document.");
+						FailAll(Application, "MRZ provided in authentication not same as MRZ encoded in Travel Document.");
+						return;
 					}
 
 					if (Face is null)
-						throw new Exception("Face not available in embedded Travel Document.");
+					{
+						FailAll(Application, "Face not available in embedded Travel Document.");
+						return;
+					}
 				}
 				catch (Exception ex)
 				{
+					// Manipulation of NFC document results in automatic failure.
+
 					Log.Exception(ex);
-					Application.InvalidateAllClaims("NFC document invalid.", "en", "NfcInvalid");
-					Application.InvalidateAllPhotos("NFC document invalid.", "en", "NfcInvalid");
+					FailAll(Application, ex.Message);
 					return;
 				}
 
 				PersonalInformation PersonalInfo = PersonalInformation.Create(Application.Claims);
 
+				DateTime? BirthDate = PersonalInfo.BirthDate;
+				if (BirthDate.HasValue)
+				{
+					if (BirthDate > DateTime.Today)
+					{
+						Application.ClaimInvalid("BDAY", "Future birth date.", "en", "FutureBirthDate", this);
+						Application.ClaimInvalid("BMONTH", "Future birth date.", "en", "FutureBirthDate", this);
+						Application.ClaimInvalid("BYEAR", "Future birth date.", "en", "FutureBirthDate", this);
+					}
+					else if (!string.IsNullOrEmpty(DocInfo.DateOfBirth) &&
+						DocInfo.DateOfBirth.Length == 6 &&
+						int.TryParse(DocInfo.DateOfBirth[..2], out int BirthYear) &&
+						int.TryParse(DocInfo.DateOfBirth[2..4], out int BirthMonth) &&
+						int.TryParse(DocInfo.DateOfBirth[4..6], out int BirthDay))
+					{
+						if (BirthDay == BirthDate.Value.Day)
+							Application.ClaimValid("BDAY", this);
+						else
+							Application.ClaimInvalid("BDAY", "Birth Day invalid.", "en", "BirthDayInvalid", this);
+
+						if (BirthMonth == BirthDate.Value.Month)
+							Application.ClaimValid("BMONTH", this);
+						else
+							Application.ClaimInvalid("BMONTH", "Birth Month invalid.", "en", "BirthMonthInvalid", this);
+
+						if (BirthYear == (BirthDate.Value.Year % 100))
+							Application.ClaimValid("BYEAR", this);
+						else
+							Application.ClaimInvalid("BYEAR", "Birth Year invalid.", "en", "BirthYearInvalid", this);
+					}
+
+					if (PersonalInfo.AgeAbove.HasValue)
+					{
+						if (PersonalInfo.Age >= PersonalInfo.AgeAbove.Value)
+							Application.ClaimValid("AGEABOVE", this);
+						else
+							Application.ClaimInvalid("AGEABOVE", "Age not reached.", "en", "AgeNotReached", this);
+					}
+				}
+
+				/*
+				foreach (KeyValuePair<string, object> P2 in Application.Claims)
+				{
+					switch (P2.Key)
+					{
+						case "FIRST":
+							Result.FirstName = P.Value.ToString();
+							break;
+
+						case "MIDDLE":
+							Result.MiddleNames = P.Value.ToString();
+							break;
+
+						case "LAST":
+							Result.LastNames = P.Value.ToString();
+							break;
+
+						case "FULLNAME":
+							Result.FullName = P.Value.ToString();
+							break;
+
+						case "ADDR":
+							Result.Address = P.Value.ToString();
+							break;
+
+						case "ADDR2":
+							Result.Address2 = P.Value.ToString();
+							break;
+
+						case "ZIP":
+							Result.PostalCode = P.Value.ToString();
+							break;
+
+						case "AREA":
+							Result.Area = P.Value.ToString();
+							break;
+
+						case "CITY":
+							Result.City = P.Value.ToString();
+							break;
+
+						case "REGION":
+							Result.Region = P.Value.ToString();
+							break;
+
+						case "COUNTRY":
+							Result.Country = P.Value.ToString();
+							break;
+
+						case "NATIONALITY":
+							Result.Nationality = P.Value.ToString();
+							break;
+
+						case "GENDER":
+							if (P.Value is Gender Gender)
+								Result.Gender = Gender;
+							else
+							{
+								switch (P.Value.ToString().ToLower())
+								{
+									case "m":
+										Result.Gender = Gender.Male;
+										break;
+
+									case "f":
+										Result.Gender = Gender.Female;
+										break;
+
+									case "x":
+										Result.Gender = Gender.Other;
+										break;
+								}
+							}
+							break;
+
+						case "BDAY":
+							if (int.TryParse(P.Value.ToString(), out int i) && i >= 1 && i <= 31)
+								Result.BirthDay = i;
+							break;
+
+						case "BMONTH":
+							if (int.TryParse(P.Value.ToString(), out i) && i >= 1 && i <= 12)
+								Result.BirthMonth = i;
+							break;
+
+						case "BYEAR":
+							if (int.TryParse(P.Value.ToString(), out i) && i >= 1900 && i <= 2100)
+								Result.BirthYear = i;
+							break;
+
+						case "AGEABOVE":
+							if (int.TryParse(P.Value.ToString(), out i) && i >= 0)
+								Result.AgeAbove = i;
+							break;
+
+						case "PNR":
+							Result.PersonalNumber = P.Value.ToString();
+							break;
+
+						case "ORGNAME":
+							Result.OrgName = P.Value.ToString();
+							Result.HasOrg = true;
+							break;
+
+						case "ORGDEPT":
+							Result.OrgDepartment = P.Value.ToString();
+							Result.HasOrg = true;
+							break;
+
+						case "ORGROLE":
+							Result.OrgRole = P.Value.ToString();
+							Result.HasOrg = true;
+							break;
+
+						case "ORGADDR":
+							Result.OrgAddress = P.Value.ToString();
+							Result.HasOrg = true;
+							break;
+
+						case "ORGADDR2":
+							Result.OrgAddress2 = P.Value.ToString();
+							Result.HasOrg = true;
+							break;
+
+						case "ORGZIP":
+							Result.OrgPostalCode = P.Value.ToString();
+							Result.HasOrg = true;
+							break;
+
+						case "ORGAREA":
+							Result.OrgArea = P.Value.ToString();
+							Result.HasOrg = true;
+							break;
+
+						case "ORGCITY":
+							Result.OrgCity = P.Value.ToString();
+							Result.HasOrg = true;
+							break;
+
+						case "ORGREGION":
+							Result.OrgRegion = P.Value.ToString();
+							Result.HasOrg = true;
+							break;
+
+						case "ORGCOUNTRY":
+							Result.OrgCountry = P.Value.ToString();
+							Result.HasOrg = true;
+							break;
+
+						case "ORGNR":
+							Result.OrgNumber = P.Value.ToString();
+							Result.HasOrg = true;
+							break;
+
+						case "PHONE":
+							Result.Phone = P.Value.ToString();
+							break;
+
+						case "EMAIL":
+							Result.EMail = P.Value.ToString();
+							break;
+
+						case "JID":
+							Result.Jid = P.Value.ToString();
+							break;
+
+					}
+				}
+				*/
 			}
 			catch (Exception ex)
 			{
 				Application.ReportError(ex.Message, null, null, ValidationErrorType.Service, this);
 			}
+		}
+
+		private static void FailAll(IIdentityApplication Application, string Message)
+		{
+			Application.InvalidateAllClaims(Message, "en", "NfcInvalid");
+			Application.InvalidateAllPhotos(Message, "en", "NfcInvalid");
 		}
 
 		#endregion
