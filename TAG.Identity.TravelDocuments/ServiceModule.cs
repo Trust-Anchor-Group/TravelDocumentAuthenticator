@@ -331,7 +331,7 @@ namespace TAG.Identity.TravelDocuments
 					if (ISO_3166_1.CompareCountryCode(PersonalInfo.Country, DocInfo.IssuingState))
 						Application.ClaimValid("COUNTRY", this);
 					else
-						Application.ClaimInvalid("COUNTRY", "Country invalid.", "en", "CountryInvalid", this);
+						Application.ClaimInvalid("COUNTRY", "Country invalid.", "en", "CountryCodeMismatch", this);
 				}
 
 				if (!CaseInsensitiveString.IsNullOrEmpty(PersonalInfo.Nationality) &&
@@ -428,7 +428,7 @@ namespace TAG.Identity.TravelDocuments
 											!(OptionalDataAsPNr ?? true) ||
 											!(DocumentNrAsPNr ?? true))
 										{
-											Application.ClaimInvalid("PNR", "Personal number does not match.", "en", "PNrMismatch", this);
+											Application.ClaimInvalid("PNR", "Personal number does not match.", "en", "PersonalNumberMismatch", this);
 										}
 									}
 								}
