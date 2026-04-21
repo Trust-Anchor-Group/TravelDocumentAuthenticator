@@ -8,8 +8,11 @@ using System.Collections.Generic;
 using System.Text;
 using System.Threading.Tasks;
 using System.Xml;
+using TAG.Identity.TravelDocuments.Data;
+using Waher.Content;
 using Waher.Events;
 using Waher.IoTGateway;
+using Waher.Persistence;
 using Waher.Runtime.Inventory;
 using Waher.Runtime.Settings;
 
@@ -279,6 +282,76 @@ namespace TAG.Identity.TravelDocuments
 							Application.ClaimInvalid("AGEABOVE", "Age not reached.", "en", "AgeNotReached", this);
 					}
 				}
+				else if (PersonalInfo.AgeAbove.HasValue &&
+					!string.IsNullOrEmpty(DocInfo.DateOfBirth) &&
+					DocInfo.DateOfBirth.Length == 6 &&
+					int.TryParse(DocInfo.DateOfBirth[..2], out int BirthYear) &&
+					int.TryParse(DocInfo.DateOfBirth[2..4], out int BirthMonth) &&
+					int.TryParse(DocInfo.DateOfBirth[4..6], out int BirthDay))
+				{
+					try
+					{
+						if (BirthYear > DateTime.Today.Year % 100)
+							BirthYear += 1900;
+						else
+							BirthYear += 2000;
+
+						DateTime BirthDate2 = new(BirthYear, BirthMonth, BirthDay);
+						if (BirthDate2 > DateTime.Today)
+						{
+							BirthYear -= 100;
+							BirthDate2 = new(BirthYear, BirthMonth, BirthDay);
+						}
+
+						int Age = Duration.GetDurationBetween(BirthDate2, DateTime.Today).Years;
+
+						if (Age >= PersonalInfo.AgeAbove.Value)
+							Application.ClaimValid("AGEABOVE", this);
+						else
+							Application.ClaimInvalid("AGEABOVE", "Age not reached.", "en", "AgeNotReached", this);
+					}
+					catch (Exception ex)
+					{
+						Application.ReportError(ex.Message, "en", "InconsistentBirthDate",
+							ValidationErrorType.Service, this);
+					}
+				}
+
+				if (!CaseInsensitiveString.IsNullOrEmpty(PersonalInfo.Country) &&
+					!string.IsNullOrEmpty(DocInfo.IssuingState))
+				{
+					if (ISO_3166_1.CompareCountryCode(PersonalInfo.Country, DocInfo.IssuingState))
+						Application.ClaimValid("COUNTRY", this);
+					else
+						Application.ClaimInvalid("COUNTRY", "Country invalid.", "en", "CountryInvalid", this);
+				}
+
+				if (!CaseInsensitiveString.IsNullOrEmpty(PersonalInfo.Nationality) &&
+					!string.IsNullOrEmpty(DocInfo.Nationality))
+				{
+					if (ISO_3166_1.CompareCountryCode(PersonalInfo.Nationality, DocInfo.Nationality))
+						Application.ClaimValid("NATIONALITY", this);
+					else
+						Application.ClaimInvalid("NATIONALITY", "Nationality invalid.", "en", "NationalityInvalid", this);
+				}
+
+				if (PersonalInfo.Gender.HasValue && !string.IsNullOrEmpty(DocInfo.Gender))
+				{
+					Paiwise.Gender? ExpectedGender = DocInfo.Gender.ToUpper() switch
+					{
+						"M" => (Paiwise.Gender?)Paiwise.Gender.Male,
+						"F" => (Paiwise.Gender?)Paiwise.Gender.Female,
+						_ => null,
+					};
+
+					if (ExpectedGender.HasValue)
+					{
+						if (PersonalInfo.Gender.Value == ExpectedGender.Value)
+							Application.ClaimValid("GENDER", this);
+						else
+							Application.ClaimInvalid("GENDER", "Gender invalid.", "en", "GenderInvalid", this);
+					}
+				}
 
 				/*
 				foreach (KeyValuePair<string, object> P2 in Application.Claims)
@@ -301,151 +374,9 @@ namespace TAG.Identity.TravelDocuments
 							Result.FullName = P.Value.ToString();
 							break;
 
-						case "ADDR":
-							Result.Address = P.Value.ToString();
-							break;
-
-						case "ADDR2":
-							Result.Address2 = P.Value.ToString();
-							break;
-
-						case "ZIP":
-							Result.PostalCode = P.Value.ToString();
-							break;
-
-						case "AREA":
-							Result.Area = P.Value.ToString();
-							break;
-
-						case "CITY":
-							Result.City = P.Value.ToString();
-							break;
-
-						case "REGION":
-							Result.Region = P.Value.ToString();
-							break;
-
-						case "COUNTRY":
-							Result.Country = P.Value.ToString();
-							break;
-
-						case "NATIONALITY":
-							Result.Nationality = P.Value.ToString();
-							break;
-
-						case "GENDER":
-							if (P.Value is Gender Gender)
-								Result.Gender = Gender;
-							else
-							{
-								switch (P.Value.ToString().ToLower())
-								{
-									case "m":
-										Result.Gender = Gender.Male;
-										break;
-
-									case "f":
-										Result.Gender = Gender.Female;
-										break;
-
-									case "x":
-										Result.Gender = Gender.Other;
-										break;
-								}
-							}
-							break;
-
-						case "BDAY":
-							if (int.TryParse(P.Value.ToString(), out int i) && i >= 1 && i <= 31)
-								Result.BirthDay = i;
-							break;
-
-						case "BMONTH":
-							if (int.TryParse(P.Value.ToString(), out i) && i >= 1 && i <= 12)
-								Result.BirthMonth = i;
-							break;
-
-						case "BYEAR":
-							if (int.TryParse(P.Value.ToString(), out i) && i >= 1900 && i <= 2100)
-								Result.BirthYear = i;
-							break;
-
-						case "AGEABOVE":
-							if (int.TryParse(P.Value.ToString(), out i) && i >= 0)
-								Result.AgeAbove = i;
-							break;
-
 						case "PNR":
 							Result.PersonalNumber = P.Value.ToString();
 							break;
-
-						case "ORGNAME":
-							Result.OrgName = P.Value.ToString();
-							Result.HasOrg = true;
-							break;
-
-						case "ORGDEPT":
-							Result.OrgDepartment = P.Value.ToString();
-							Result.HasOrg = true;
-							break;
-
-						case "ORGROLE":
-							Result.OrgRole = P.Value.ToString();
-							Result.HasOrg = true;
-							break;
-
-						case "ORGADDR":
-							Result.OrgAddress = P.Value.ToString();
-							Result.HasOrg = true;
-							break;
-
-						case "ORGADDR2":
-							Result.OrgAddress2 = P.Value.ToString();
-							Result.HasOrg = true;
-							break;
-
-						case "ORGZIP":
-							Result.OrgPostalCode = P.Value.ToString();
-							Result.HasOrg = true;
-							break;
-
-						case "ORGAREA":
-							Result.OrgArea = P.Value.ToString();
-							Result.HasOrg = true;
-							break;
-
-						case "ORGCITY":
-							Result.OrgCity = P.Value.ToString();
-							Result.HasOrg = true;
-							break;
-
-						case "ORGREGION":
-							Result.OrgRegion = P.Value.ToString();
-							Result.HasOrg = true;
-							break;
-
-						case "ORGCOUNTRY":
-							Result.OrgCountry = P.Value.ToString();
-							Result.HasOrg = true;
-							break;
-
-						case "ORGNR":
-							Result.OrgNumber = P.Value.ToString();
-							Result.HasOrg = true;
-							break;
-
-						case "PHONE":
-							Result.Phone = P.Value.ToString();
-							break;
-
-						case "EMAIL":
-							Result.EMail = P.Value.ToString();
-							break;
-
-						case "JID":
-							Result.Jid = P.Value.ToString();
-							break;
-
 					}
 				}
 				*/

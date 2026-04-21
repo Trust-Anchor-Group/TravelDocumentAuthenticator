@@ -36,8 +36,4 @@
     <Exec Command="&quot;$(SolutionDir)..\IoTGateway\Utilities\Waher.Utility.Install\bin\$(ConfigurationName)\net8.0\win-x86\Waher.Utility.Install.exe&quot; -m &quot;$(SolutionDir)TAG.Identity.TravelDocuments\bin\$(ConfigurationName)\net8.0\TAG.Identity.TravelDocuments.manifest&quot; -s &quot;$(SolutionDir)..\IoTGateway\Waher.IoTGateway.Console\bin\$(ConfigurationName)\net8.0\Waher.IoTGateway.Console.dll&quot; -d &quot;C:\ProgramData\IoT Gateway Dev&quot;&#xD;&#xA;" />
   </Target>
 
-  <Target Name="PreBuild" BeforeTargets="PreBuildEvent">
-    <Exec Command="copy &quot;$(SolutionDir)..\NeuroAccessMaui\NeuroAccessMaui\Services\Data\ISO_3166_1.cs&quot; &quot;$(ProjectDir)Data&#xD;&#xA;copy &quot;$(SolutionDir)..\NeuroAccessMaui\NeuroAccessMaui\Services\Data\ISO_3166_Country.cs&quot; &quot;$(ProjectDir)Data" />
-  </Target>
-
 </Project>

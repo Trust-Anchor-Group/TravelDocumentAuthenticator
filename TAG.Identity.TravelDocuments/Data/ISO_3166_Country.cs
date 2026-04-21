@@ -1,6 +1,9 @@
 ﻿using Waher.Content.Emoji;
 
-namespace NeuroAccessMaui.Services.Data
+// Note: Taken from NeuroAccessMaui repository. Important to keep in sync with that
+// repository, without removing extensions added in this repository.
+
+namespace TAG.Identity.TravelDocuments.Data
 {
 	/// <summary>
 	/// Representation of an ISO3166-1 Country

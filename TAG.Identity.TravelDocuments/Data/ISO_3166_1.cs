@@ -1,7 +1,12 @@
-﻿using System.Diagnostics.CodeAnalysis;
+﻿using System;
+using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using Waher.Content.Emoji;
 
-namespace NeuroAccessMaui.Services.Data
+// Note: Taken from NeuroAccessMaui repository. Important to keep in sync with that
+// repository, without removing extensions added in this repository.
+
+namespace TAG.Identity.TravelDocuments.Data
 {
 	/// <summary>
 	/// Conversion between Country Names and ISO-3166-1 country codes.
@@ -11,6 +16,7 @@ namespace NeuroAccessMaui.Services.Data
 		private static readonly ISO_3166_Country defaultCountry = new("United States of America", "US", "USA", 840, "1", EmojiUtilities.Emoji_flag_us);
 		private static readonly SortedDictionary<string, ISO_3166_Country> code2ByCountry = new(StringComparer.InvariantCultureIgnoreCase);
 		private static readonly SortedDictionary<string, ISO_3166_Country> countryByCode2 = new(StringComparer.InvariantCultureIgnoreCase);
+		private static readonly SortedDictionary<string, ISO_3166_Country> countryByCode3 = new(StringComparer.InvariantCultureIgnoreCase);
 		private static readonly SortedDictionary<string, ISO_3166_Country> countryByPhone = new(StringComparer.InvariantCultureIgnoreCase);
 
 		static ISO_3166_1()
@@ -22,6 +28,7 @@ namespace NeuroAccessMaui.Services.Data
 
 				code2ByCountry[Country.Name] = Country;
 				countryByCode2[Country.Alpha2] = Country;
+				countryByCode3[Country.Alpha3] = Country;
 				countryByPhone[Country.DialCode] = Country;
 			}
 		}
@@ -35,6 +42,23 @@ namespace NeuroAccessMaui.Services.Data
 		/// This collection built from Wikipedia entry on ISO3166-1 on 9th Feb 2016
 		/// </summary>
 		public static ISO_3166_Country[] Countries => countries;
+
+		/// <summary>
+		/// Compares two country codes.
+		/// </summary>
+		/// <param name="Code1">Country code 1</param>
+		/// <param name="Code2">Country code 2</param>
+		/// <returns></returns>
+		public static bool CompareCountryCode(string Code1, string Code2)
+		{
+			if (TryGetCountryByCode(Code1, out ISO_3166_Country? Country1) &&
+				TryGetCountryByCode(Code2, out ISO_3166_Country? Country2))
+			{
+				return Country1.Name == Country2.Name;
+			}
+			else
+				return string.Equals(Code1, Code2, StringComparison.OrdinalIgnoreCase);
+		}
 
 		/// <summary>
 		/// Tries to get the country, given its country and phone codes.
@@ -75,8 +99,12 @@ namespace NeuroAccessMaui.Services.Data
 				Country = null;
 				return false;
 			}
+			else if (countryByCode2.TryGetValue(CountryCode, out Country))
+				return true;
+			else if (countryByCode3.TryGetValue(CountryCode, out Country))
+				return true;
 			else
-				return countryByCode2.TryGetValue(CountryCode, out Country);
+				return false;
 		}
 
 		/// <summary>
