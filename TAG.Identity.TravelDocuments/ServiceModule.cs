@@ -1,5 +1,6 @@
 ﻿using NeuroAccess.Nfc;
 using NeuroAccess.Nfc.TravelDocuments;
+using NeuroAccess.Nfc.TravelDocuments.DataObjects;
 using NeuroAccess.Nfc.TravelDocuments.ISO19794;
 using Paiwise;
 using System;
@@ -169,6 +170,7 @@ namespace TAG.Identity.TravelDocuments
 				XmlDocument Nfc = P.Key;
 				DocumentInformation DocInfo = P.Value;
 				Representation Face = null;
+				AdditionalPersonalDetails AdditionalDetails = null;
 
 				if (Nfc is null || DocInfo is null)
 					return;
@@ -201,6 +203,12 @@ namespace TAG.Identity.TravelDocuments
 						if (Client.BiometricEncodingFace is not null)
 							Face = Client.BiometricEncodingFace[0].BiometricDataBlock?.Record?.Representations[0];
 
+						return Task.CompletedTask;
+					};
+
+					Client.PersonalInformationUpdated += (_, e) =>
+					{
+						AdditionalDetails = Client.PersonalInformation;
 						return Task.CompletedTask;
 					};
 
@@ -353,6 +361,84 @@ namespace TAG.Identity.TravelDocuments
 					}
 				}
 
+				if (!CaseInsensitiveString.IsNullOrEmpty(PersonalInfo.PersonalNumber))
+				{
+					string Country = PersonalInfo.Country;
+
+					if (string.IsNullOrEmpty(Country) &&
+						!string.IsNullOrEmpty(DocInfo.IssuingState) &&
+						ISO_3166_1.TryGetCountryByCode(DocInfo.IssuingState, out ISO_3166_Country Country2))
+					{
+						Country = Country2.Alpha2;
+					}
+
+					if (!string.IsNullOrEmpty(Country))
+					{
+						IPersonalNumberValidator PNrValidator = Types.FindBest<IPersonalNumberValidator, string>(Country);
+						if (PNrValidator is not null)
+						{
+							bool? Valid = await PNrValidator.IsValid(Country, PersonalInfo.PersonalNumber);
+
+							if (Valid.HasValue)
+							{
+								if (!Valid.Value)
+									Application.ClaimInvalid("PNR", "Personal number invalid according to national rules.", "en", "PersonalNumberInvalid", this);
+								else
+								{
+									string NormalizedPNr = await PNrValidator.Normalize(Country, PersonalInfo.PersonalNumber);
+
+									if (NormalizedPNr != PersonalInfo.PersonalNumber)
+										Application.ClaimInvalid("PNR", "Personal number not normalized.", "en", "PNrNotNormalized", this);
+									else
+									{
+										bool? AdditionalInfoAsPNr = null;
+										bool? OptionalDataAsPNr = null;
+										bool? DocumentNrAsPNr = null;
+
+										if (!string.IsNullOrEmpty(AdditionalDetails?.PersonalNumber) &&
+											((await PNrValidator.IsValid(Country, AdditionalDetails.PersonalNumber)) ?? false))
+										{
+											AdditionalInfoAsPNr = await PNrValidator.Normalize(
+												Country, AdditionalDetails.PersonalNumber) == NormalizedPNr;
+										}
+
+										if (!string.IsNullOrEmpty(DocInfo.OptionalData) &&
+											((await PNrValidator.IsValid(Country, DocInfo.OptionalData)) ?? false))
+										{
+											OptionalDataAsPNr = await PNrValidator.Normalize(
+												Country, DocInfo.OptionalData) == NormalizedPNr;
+										}
+
+										if (!string.IsNullOrEmpty(DocInfo.DocumentNumber) &&
+											((await PNrValidator.IsValid(Country, DocInfo.DocumentNumber)) ?? false))
+										{
+											DocumentNrAsPNr = await PNrValidator.Normalize(
+												Country, DocInfo.DocumentNumber) == NormalizedPNr;
+										}
+
+										if ((AdditionalInfoAsPNr ?? false) ||
+											(OptionalDataAsPNr ?? false) ||
+											(DocumentNrAsPNr ?? false))
+										{
+											Application.ClaimValid("PNR", this);
+										}
+
+
+										if (!(AdditionalInfoAsPNr ?? true) ||
+											!(OptionalDataAsPNr ?? true) ||
+											!(DocumentNrAsPNr ?? true))
+										{
+											Application.ClaimInvalid("PNR", "Personal number does not match.", "en", "PNrMismatch", this);
+										}
+									}
+								}
+							}
+						}
+					}
+					else
+						Application.ClaimInvalid("PNR", "Country not specified, or available in MRZ.", "en", "CountryNotSpecified", this);
+				}
+
 				/*
 				foreach (KeyValuePair<string, object> P2 in Application.Claims)
 				{
@@ -372,10 +458,6 @@ namespace TAG.Identity.TravelDocuments
 
 						case "FULLNAME":
 							Result.FullName = P.Value.ToString();
-							break;
-
-						case "PNR":
-							Result.PersonalNumber = P.Value.ToString();
 							break;
 					}
 				}
