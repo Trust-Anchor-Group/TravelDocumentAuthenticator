@@ -1,0 +1,308 @@
+﻿using Paiwise;
+using System.Text;
+using System.Xml;
+using Waher.Content;
+using Waher.Content.Images;
+using Waher.Persistence;
+using Waher.Persistence.Files;
+using Waher.Persistence.Serialization;
+using Waher.Runtime.Inventory;
+using Waher.Runtime.IO;
+using Waher.Runtime.Settings;
+
+namespace TAG.Identity.TravelDocuments.Test
+{
+	[TestClass]
+	public sealed class IdentityApplicationTests
+	{
+		private static ServiceModule? module;
+		private static FilesProvider? filesProvider;
+
+		[AssemblyInitialize]
+		public static async Task AssemblyInitialize(TestContext _)
+		{
+			Types.Initialize(
+				typeof(IdentityApplicationTests).Assembly,
+				typeof(IIdentityApplication).Assembly,
+				typeof(ServiceModule).Assembly,
+				typeof(InternetContent).Assembly,
+				typeof(ImageCodec).Assembly,
+				typeof(Database).Assembly,
+				typeof(FilesProvider).Assembly,
+				typeof(ObjectSerializer).Assembly,
+				typeof(RuntimeSettings).Assembly);
+
+			if (!Database.HasProvider)
+			{
+				filesProvider = await FilesProvider.CreateAsync("Data", "Default", 8192, 1000, 8192, Encoding.UTF8, 10000, true);
+				Database.Register(filesProvider);
+			}
+
+			Assert.IsTrue(await Types.StartAllModules(60000));
+
+			foreach (IModule Module in Types.GetLoadedModules())
+			{
+				if (Module is ServiceModule ServiceModule)
+					module = ServiceModule;
+			}
+
+			Assert.IsNotNull(module);
+		}
+
+		[AssemblyCleanup]
+		public static async Task AssemblyCleanup()
+		{
+			await Types.StopAllModules();
+
+			if (filesProvider is not null)
+			{
+				await filesProvider.DisposeAsync();
+				filesProvider = null;
+			}
+
+			module = null;
+		}
+
+		[TestMethod]
+		[DataRow("Passport01", "Claims.json", "ProfilePhoto.jpg", "NFC.xml")]
+		public async Task Test_01_Supports(string Folder, string ClaimsFile, string PhotoFile, string NfcFile)
+		{
+			KeyValuePair<string, object>[] Claims = await LoadClaims(Folder, ClaimsFile);
+			PersonalInformation PI = Create(Claims);
+
+			IdentityApplication Application = new(
+				Guid.NewGuid().ToString() + "@example.org", 
+				"urn:nf:iot:leg:id:1.0", true, PI,
+				await LoadClaims(Folder,ClaimsFile),
+				[
+					await LoadPhoto(Folder, PhotoFile)
+				],
+				[
+					LoadDocument(Folder, NfcFile)
+				],
+				new InternalTestAccount());
+
+			Assert.IsTrue(module!.Supports(Application) > Grade.NotAtAll);
+		}
+
+		private static string GetPath(string Folder, string FileName)
+		{
+			return Path.GetFullPath(Path.Combine("..", "..", "..", "SensitiveData", Folder, FileName));
+		}
+
+		private static async Task<KeyValuePair<string, object>[]> LoadClaims(string Folder, string FileName)
+		{
+			string s = await Files.ReadAllTextAsync(GetPath(Folder, FileName));
+			Dictionary<string, object> Result = (Dictionary<string, object>)JSON.Parse(s);
+			return [.. Result];
+		}
+
+		private static async Task<Photo> LoadPhoto(string Folder, string FileName)
+		{
+			string ContentType = InternetContent.GetContentType(Path.GetExtension(FileName));
+			byte[] Binary = await File.ReadAllBytesAsync(GetPath(Folder, FileName));
+
+			return new Photo(ContentType, FileName, Binary);
+		}
+
+		private static XmlDocument LoadDocument(string Folder, string FileName)
+		{
+			XmlDocument Doc = new();
+			Doc.Load(GetPath(Folder, FileName));
+			
+			return Doc;
+		}
+
+		public static PersonalInformation Create(IEnumerable<KeyValuePair<string, object>> Properties)
+		{
+			PersonalInformation Result = new();
+
+			foreach (KeyValuePair<string, object> P in Properties)
+			{
+				switch (P.Key)
+				{
+					case "FIRST":
+						Result.FirstName = P.Value?.ToString();
+						break;
+
+					case "MIDDLE":
+						Result.MiddleNames = P.Value?.ToString();
+						break;
+
+					case "LAST":
+						Result.LastNames = P.Value?.ToString();
+						break;
+
+					case "FULLNAME":
+						Result.FullName = P.Value?.ToString();
+						break;
+
+					case "ADDR":
+						Result.Address = P.Value?.ToString();
+						break;
+
+					case "ADDR2":
+						Result.Address2 = P.Value?.ToString();
+						break;
+
+					case "ZIP":
+						Result.PostalCode = P.Value?.ToString();
+						break;
+
+					case "AREA":
+						Result.Area = P.Value?.ToString();
+						break;
+
+					case "CITY":
+						Result.City = P.Value?.ToString();
+						break;
+
+					case "REGION":
+						Result.Region = P.Value?.ToString();
+						break;
+
+					case "COUNTRY":
+						Result.Country = P.Value?.ToString();
+						break;
+
+					case "NATIONALITY":
+						Result.Nationality = P.Value?.ToString();
+						break;
+
+					case "GENDER":
+						if (P.Value is Gender Gender)
+							Result.Gender = Gender;
+						else
+						{
+							switch (P.Value?.ToString()?.ToLower())
+							{
+								case "m":
+									Result.Gender = Gender.Male;
+									break;
+
+								case "f":
+									Result.Gender = Gender.Female;
+									break;
+
+								case "x":
+									Result.Gender = Gender.Other;
+									break;
+							}
+						}
+						break;
+
+					case "BDAY":
+						if (int.TryParse(P.Value?.ToString(), out int i) && i >= 1 && i <= 31)
+							Result.BirthDay = i;
+						break;
+
+					case "BMONTH":
+						if (int.TryParse(P.Value?.ToString(), out i) && i >= 1 && i <= 12)
+							Result.BirthMonth = i;
+						break;
+
+					case "BYEAR":
+						if (int.TryParse(P.Value?.ToString(), out i) && i >= 1900 && i <= 2100)
+							Result.BirthYear = i;
+						break;
+
+					case "PNR":
+						Result.PersonalNumber = P.Value?.ToString();
+						break;
+
+					case "ORGNAME":
+						Result.OrgName = P.Value?.ToString();
+						Result.HasOrg = true;
+						break;
+
+					case "ORGDEPT":
+						Result.OrgDepartment = P.Value?.ToString();
+						Result.HasOrg = true;
+						break;
+
+					case "ORGROLE":
+						Result.OrgRole = P.Value?.ToString();
+						Result.HasOrg = true;
+						break;
+
+					case "ORGADDR":
+						Result.OrgAddress = P.Value?.ToString();
+						Result.HasOrg = true;
+						break;
+
+					case "ORGADDR2":
+						Result.OrgAddress2 = P.Value?.ToString();
+						Result.HasOrg = true;
+						break;
+
+					case "ORGZIP":
+						Result.OrgPostalCode = P.Value?.ToString();
+						Result.HasOrg = true;
+						break;
+
+					case "ORGAREA":
+						Result.OrgArea = P.Value?.ToString();
+						Result.HasOrg = true;
+						break;
+
+					case "ORGCITY":
+						Result.OrgCity = P.Value?.ToString();
+						Result.HasOrg = true;
+						break;
+
+					case "ORGREGION":
+						Result.OrgRegion = P.Value?.ToString();
+						Result.HasOrg = true;
+						break;
+
+					case "ORGCOUNTRY":
+						Result.OrgCountry = P.Value?.ToString();
+						Result.HasOrg = true;
+						break;
+
+					case "ORGNR":
+						Result.OrgNumber = P.Value?.ToString();
+						Result.HasOrg = true;
+						break;
+
+					case "PHONE":
+						Result.Phone = P.Value?.ToString();
+						break;
+
+					case "EMAIL":
+						Result.EMail = P.Value?.ToString();
+						break;
+
+					case "JID":
+						Result.Jid = P.Value?.ToString();
+						break;
+				}
+			}
+
+			Result.HasBirthDate =
+				Result.BirthDay.HasValue &&
+				Result.BirthMonth.HasValue &&
+				Result.BirthYear.HasValue &&
+				Result.BirthDay.Value <= DateTime.DaysInMonth(Result.BirthYear.Value, Result.BirthMonth.Value);
+
+			if (!Result.HasBirthDate)
+			{
+				Result.BirthDay = null;
+				Result.BirthMonth = null;
+				Result.BirthYear = null;
+			}
+
+			if (CaseInsensitiveString.IsNullOrEmpty(Result.FullName))
+				Result.FullName = Waher.Networking.XMPP.Contracts.LegalIdentity.JoinNames(Result.FirstName, Result.MiddleNames, Result.LastNames);
+			else if (CaseInsensitiveString.IsNullOrEmpty(Result.FirstName) &&
+				CaseInsensitiveString.IsNullOrEmpty(Result.MiddleNames) &&
+				CaseInsensitiveString.IsNullOrEmpty(Result.LastNames))
+			{
+				Waher.Networking.XMPP.Contracts.LegalIdentity.SeparateNames(Result.FullName, out Result.FirstName, out Result.MiddleNames, out Result.LastNames);
+			}
+
+			return Result;
+		}
+
+	}
+}

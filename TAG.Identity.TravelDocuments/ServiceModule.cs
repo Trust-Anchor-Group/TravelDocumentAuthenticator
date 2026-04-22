@@ -552,7 +552,7 @@ namespace TAG.Identity.TravelDocuments
 			if (c == 1)
 				return Names[0];
 
-			StringBuilder sb = new StringBuilder();
+			StringBuilder sb = new();
 
 			for (int i = 0; i < c; i++)
 			{

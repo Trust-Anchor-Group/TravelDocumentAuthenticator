@@ -51,8 +51,8 @@ namespace TAG.Identity.TravelDocuments.Data
 		/// <returns></returns>
 		public static bool CompareCountryCode(string Code1, string Code2)
 		{
-			if (TryGetCountryByCode(Code1, out ISO_3166_Country? Country1) &&
-				TryGetCountryByCode(Code2, out ISO_3166_Country? Country2))
+			if (TryGetCountryByCode(Code1, out ISO_3166_Country Country1) &&
+				TryGetCountryByCode(Code2, out ISO_3166_Country Country2))
 			{
 				return Country1.Name == Country2.Name;
 			}
@@ -66,9 +66,9 @@ namespace TAG.Identity.TravelDocuments.Data
 		/// <param name="PhoneNumber">ISO-3166-1 phone number (case insensitive).</param>
 		/// <param name="Country">ISO-3166-1 Country, if found.</param>
 		/// <returns>If a country was found matching the country code.</returns>
-		public static bool TryGetCountryByPhone(string PhoneNumber, [NotNullWhen(true)] out ISO_3166_Country? Country)
+		public static bool TryGetCountryByPhone(string PhoneNumber, [NotNullWhen(true)] out ISO_3166_Country Country)
 		{
-			ISO_3166_Country? Result = null;
+			ISO_3166_Country Result = null;
 
 			foreach (ISO_3166_Country Item in Countries)
 			{
@@ -92,7 +92,7 @@ namespace TAG.Identity.TravelDocuments.Data
 		/// <param name="CountryCode">ISO-3166-1 Country code (case insensitive).</param>
 		/// <param name="Country">ISO-3166-1 Country, if found.</param>
 		/// <returns>If a country was found matching the country code.</returns>
-		public static bool TryGetCountryByCode(string? CountryCode, [NotNullWhen(true)] out ISO_3166_Country? Country)
+		public static bool TryGetCountryByCode(string CountryCode, [NotNullWhen(true)] out ISO_3166_Country Country)
 		{
 			if (string.IsNullOrEmpty(CountryCode))
 			{
@@ -113,7 +113,7 @@ namespace TAG.Identity.TravelDocuments.Data
 		/// <param name="CountryName">Country name (case insensitive).</param>
 		/// <param name="Country">ISO-3166-1 Country, if found.</param>
 		/// <returns>If a country code was found matching the country name.</returns>
-		public static bool TryGetCountryByName(string CountryName, [NotNullWhen(true)] out ISO_3166_Country? Country)
+		public static bool TryGetCountryByName(string CountryName, [NotNullWhen(true)] out ISO_3166_Country Country)
 		{
 			return code2ByCountry.TryGetValue(CountryName, out Country);
 		}
@@ -123,11 +123,11 @@ namespace TAG.Identity.TravelDocuments.Data
 		/// </summary>
 		/// <param name="CountryCode">Country code.</param>
 		/// <returns>Country name, or if not found, the original code.</returns>
-		public static string? ToName(string? CountryCode)
+		public static string ToName(string CountryCode)
 		{
 			if (CountryCode is null)
 				return null;
-			else if (TryGetCountryByCode(CountryCode, out ISO_3166_Country? Country))
+			else if (TryGetCountryByCode(CountryCode, out ISO_3166_Country Country))
 				return Country.Name;
 			else
 				return CountryCode;
@@ -138,11 +138,11 @@ namespace TAG.Identity.TravelDocuments.Data
 		/// </summary>
 		/// <param name="CountryName">Country name.</param>
 		/// <returns>Country code, or if not found, the original name.</returns>
-		public static string? ToCode(string? CountryName)
+		public static string ToCode(string CountryName)
 		{
 			if (CountryName is null)
 				return null;
-			else if (TryGetCountryByName(CountryName, out ISO_3166_Country? Country))
+			else if (TryGetCountryByName(CountryName, out ISO_3166_Country Country))
 				return Country.Alpha2;
 			else
 				return CountryName;
