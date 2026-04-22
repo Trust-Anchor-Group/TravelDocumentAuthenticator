@@ -1,4 +1,5 @@
-﻿using Paiwise;
+﻿using NeuroAccess.Nfc.TravelDocuments;
+using Paiwise;
 using System.Text;
 using System.Xml;
 using Waher.Content;
@@ -9,6 +10,7 @@ using Waher.Persistence.Serialization;
 using Waher.Runtime.Inventory;
 using Waher.Runtime.IO;
 using Waher.Runtime.Settings;
+using Waher.Script;
 
 namespace TAG.Identity.TravelDocuments.Test
 {
@@ -25,12 +27,14 @@ namespace TAG.Identity.TravelDocuments.Test
 				typeof(IdentityApplicationTests).Assembly,
 				typeof(IIdentityApplication).Assembly,
 				typeof(ServiceModule).Assembly,
+				typeof(TravelDocumentsClient).Assembly,
 				typeof(InternetContent).Assembly,
 				typeof(ImageCodec).Assembly,
 				typeof(Database).Assembly,
 				typeof(FilesProvider).Assembly,
 				typeof(ObjectSerializer).Assembly,
-				typeof(RuntimeSettings).Assembly);
+				typeof(RuntimeSettings).Assembly,
+				typeof(Expression).Assembly);
 
 			if (!Database.HasProvider)
 			{
@@ -83,6 +87,39 @@ namespace TAG.Identity.TravelDocuments.Test
 				new InternalTestAccount());
 
 			Assert.IsTrue(module!.Supports(Application) > Grade.NotAtAll);
+		}
+
+		[TestMethod]
+		[DataRow("Passport01", "Claims.json", "ProfilePhoto.jpg", "NFC.xml")]
+		public async Task Test_02_Validate(string Folder, string ClaimsFile, string PhotoFile, string NfcFile)
+		{
+			KeyValuePair<string, object>[] Claims = await LoadClaims(Folder, ClaimsFile);
+			PersonalInformation PI = Create(Claims);
+
+			IdentityApplication Application = new(
+				Guid.NewGuid().ToString() + "@example.org",
+				"urn:nf:iot:leg:id:1.0", true, PI,
+				await LoadClaims(Folder, ClaimsFile),
+				[
+					await LoadPhoto(Folder, PhotoFile)
+				],
+				[
+					LoadDocument(Folder, NfcFile)
+				],
+				new InternalTestAccount());
+
+			Assert.IsTrue(module!.Supports(Application) > Grade.NotAtAll);
+
+			await module.Validate(Application);
+
+			Application.ClaimValid("PREVIEW", this);
+
+			Assert.IsFalse(Application.HasErrors, "Application has errors.");
+			Assert.AreEqual(0, Application.UnvalidatedClaims.Length, "Application has unvalidated claims.");
+			Assert.AreEqual(0, Application.UnvalidatedPhotos.Length, "Application has unvalidated photos.");
+			Assert.IsTrue(Application.HasValidatedClaims, "Application has no validated claims.");
+			Assert.IsTrue(Application.HasValidatedPhotos, "Application is no validated photos.");
+			Assert.IsTrue(Application.IsValid, "Application is not valid.");
 		}
 
 		private static string GetPath(string Folder, string FileName)

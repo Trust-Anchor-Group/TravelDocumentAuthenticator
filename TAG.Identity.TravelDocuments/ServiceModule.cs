@@ -205,7 +205,7 @@ namespace TAG.Identity.TravelDocuments
 				try
 				{
 					IsoDepReplay Replay = new(Nfc);
-					byte[] LocalKeySeed = Encoding.UTF8.GetBytes(PreviewId);
+					byte[] LocalKeySeed = PreviewId == "N/A" ? null : Encoding.UTF8.GetBytes(PreviewId);
 					using TravelDocumentsClient Client = new(Replay, Replay.DocumentInfo, LocalKeySeed);
 
 					AuthenticateResult AuthResult = await Client.Authenticate();
@@ -404,43 +404,52 @@ namespace TAG.Identity.TravelDocuments
 						IPersonalNumberValidator PNrValidator = Types.FindBest<IPersonalNumberValidator, string>(Country);
 						if (PNrValidator is not null)
 						{
-							bool? Valid = await PNrValidator.IsValid(Country, PersonalInfo.PersonalNumber);
+							string s = await PNrValidator.Normalize(Country, PersonalInfo.PersonalNumber);
 
-							if (Valid.HasValue)
+							if (s != PersonalInfo.PersonalNumber)
+								Application.ClaimInvalid(PersonalInformation.PersonalNumberTag, "Personal number not normalized.", "en", "PNrNotNormalized", this);
+							else
 							{
-								if (!Valid.Value)
-									Application.ClaimInvalid(PersonalInformation.PersonalNumberTag, "Personal number invalid according to national rules.", "en", "PersonalNumberInvalid", this);
-								else
-								{
-									string NormalizedPNr = await PNrValidator.Normalize(Country, PersonalInfo.PersonalNumber);
+								bool? Valid = await PNrValidator.IsValid(Country, PersonalInfo.PersonalNumber);
 
-									if (NormalizedPNr != PersonalInfo.PersonalNumber)
-										Application.ClaimInvalid(PersonalInformation.PersonalNumberTag, "Personal number not normalized.", "en", "PNrNotNormalized", this);
+								if (Valid.HasValue)
+								{
+									if (!Valid.Value)
+										Application.ClaimInvalid(PersonalInformation.PersonalNumberTag, "Personal number invalid according to national rules.", "en", "PersonalNumberInvalid", this);
 									else
 									{
 										bool? AdditionalInfoAsPNr = null;
 										bool? OptionalDataAsPNr = null;
 										bool? DocumentNrAsPNr = null;
 
-										if (!string.IsNullOrEmpty(AdditionalDetails?.PersonalNumber) &&
-											((await PNrValidator.IsValid(Country, AdditionalDetails.PersonalNumber)) ?? false))
+										if (!string.IsNullOrEmpty(AdditionalDetails?.PersonalNumber))
 										{
-											AdditionalInfoAsPNr = await PNrValidator.Normalize(
-												Country, AdditionalDetails.PersonalNumber) == NormalizedPNr;
+											s = await PNrValidator.Normalize(Country, AdditionalDetails?.PersonalNumber);
+											if (!string.IsNullOrEmpty(s) &&
+												(await PNrValidator.IsValid(Country, s) ?? false))
+											{
+												AdditionalInfoAsPNr = s == PersonalInfo.PersonalNumber;
+											}
 										}
 
-										if (!string.IsNullOrEmpty(DocInfo.OptionalData) &&
-											((await PNrValidator.IsValid(Country, DocInfo.OptionalData)) ?? false))
+										if (!string.IsNullOrEmpty(DocInfo.OptionalData))
 										{
-											OptionalDataAsPNr = await PNrValidator.Normalize(
-												Country, DocInfo.OptionalData) == NormalizedPNr;
+											s = await PNrValidator.Normalize(Country, DocInfo.OptionalData);
+											if (!string.IsNullOrEmpty(s) &&
+												(await PNrValidator.IsValid(Country, s) ?? false))
+											{
+												OptionalDataAsPNr = s == PersonalInfo.PersonalNumber;
+											}
 										}
 
-										if (!string.IsNullOrEmpty(DocInfo.DocumentNumber) &&
-											((await PNrValidator.IsValid(Country, DocInfo.DocumentNumber)) ?? false))
+										if (!string.IsNullOrEmpty(DocInfo.DocumentNumber))
 										{
-											DocumentNrAsPNr = await PNrValidator.Normalize(
-												Country, DocInfo.DocumentNumber) == NormalizedPNr;
+											s = await PNrValidator.Normalize(Country, DocInfo.DocumentNumber);
+											if (!string.IsNullOrEmpty(s) &&
+												(await PNrValidator.IsValid(Country, s) ?? false))
+											{
+												DocumentNrAsPNr = s == PersonalInfo.PersonalNumber;
+											}
 										}
 
 										if ((AdditionalInfoAsPNr ?? false) ||
@@ -449,7 +458,6 @@ namespace TAG.Identity.TravelDocuments
 										{
 											Application.ClaimValid(PersonalInformation.PersonalNumberTag, this);
 										}
-
 
 										if (!(AdditionalInfoAsPNr ?? true) ||
 											!(OptionalDataAsPNr ?? true) ||
