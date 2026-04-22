@@ -274,6 +274,8 @@ namespace TAG.Identity.TravelDocuments
 					return;
 				}
 
+				// Validate Personal Information claims
+
 				PersonalInformation PersonalInfo = PersonalInformation.Create(Application.Claims);
 
 				DateTime? BirthDate = PersonalInfo.BirthDate;
