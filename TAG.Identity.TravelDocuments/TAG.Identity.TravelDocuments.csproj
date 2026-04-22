@@ -2,7 +2,8 @@
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
-  </PropertyGroup>
+		<CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+	</PropertyGroup>
 
   <ItemGroup>
     <None Remove="Root\TravelDocuments\TravelDocuments.md" />
@@ -19,7 +20,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="CoreJ2K" Version="2.1.2.38" />
+    <PackageReference Include="CoreJ2K.Skia" Version="2.1.2.38" />
     <PackageReference Include="Paiwise" Version="3.2.0" />
+    <PackageReference Include="SkiaSharp" Version="3.119.2" />
     <PackageReference Include="Waher.Content" Version="3.4.8" />
     <PackageReference Include="Waher.Events" Version="1.4.7" />
     <PackageReference Include="Waher.IoTGateway" Version="3.6.1" />
@@ -30,6 +34,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\NeuroAccessMaui\NeuroAccess.Nfc\NeuroAccess.Nfc.csproj" />
+    <ProjectReference Include="..\TAG.Networking.DeepFace\TAG.Networking.DeepFace.csproj" />
   </ItemGroup>
 
   <Target Name="PostBuild" AfterTargets="PostBuildEvent">

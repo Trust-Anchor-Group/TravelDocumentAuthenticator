@@ -1,8 +1,11 @@
-﻿using NeuroAccess.Nfc;
+﻿using CoreJ2K;
+using CoreJ2K.Util;
+using NeuroAccess.Nfc;
 using NeuroAccess.Nfc.TravelDocuments;
 using NeuroAccess.Nfc.TravelDocuments.DataObjects;
 using NeuroAccess.Nfc.TravelDocuments.ISO19794;
 using Paiwise;
+using SkiaSharp;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -11,6 +14,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Xml;
 using TAG.Identity.TravelDocuments.Data;
+using TAG.Networking.DeepFace;
 using Waher.Content;
 using Waher.Events;
 using Waher.IoTGateway;
@@ -181,6 +185,8 @@ namespace TAG.Identity.TravelDocuments
 		/// <param name="Application">Identity application.</param>
 		public async Task Validate(IIdentityApplication Application)
 		{
+			SKBitmap TravelDocumentFaceBitmap = null;
+
 			try
 			{
 				string PreviewId = GetPreviewId(Application);
@@ -194,7 +200,7 @@ namespace TAG.Identity.TravelDocuments
 				KeyValuePair<XmlDocument, DocumentInformation> P = GetNfcDocument(Application);
 				XmlDocument Nfc = P.Key;
 				DocumentInformation DocInfo = P.Value;
-				Representation Face = null;
+				Representation TravelDocumentFace = null;
 				AdditionalPersonalDetails AdditionalDetails = null;
 
 				if (Nfc is null || DocInfo is null)
@@ -205,7 +211,7 @@ namespace TAG.Identity.TravelDocuments
 				try
 				{
 					IsoDepReplay Replay = new(Nfc);
-					byte[] LocalKeySeed = PreviewId == "N/A" ? null : Encoding.UTF8.GetBytes(PreviewId);
+					byte[] LocalKeySeed = PreviewId == "TEST" ? null : Encoding.UTF8.GetBytes(PreviewId);
 					using TravelDocumentsClient Client = new(Replay, Replay.DocumentInfo, LocalKeySeed);
 
 					AuthenticateResult AuthResult = await Client.Authenticate();
@@ -226,7 +232,7 @@ namespace TAG.Identity.TravelDocuments
 					Client.BiometricEncodingFaceUpdated += (_, e) =>
 					{
 						if (Client.BiometricEncodingFace is not null)
-							Face = Client.BiometricEncodingFace[0].BiometricDataBlock?.Record?.Representations[0];
+							TravelDocumentFace = Client.BiometricEncodingFace[0].BiometricDataBlock?.Record?.Representations[0];
 
 						return Task.CompletedTask;
 					};
@@ -259,11 +265,14 @@ namespace TAG.Identity.TravelDocuments
 						return;
 					}
 
-					if (Face is null)
+					if (TravelDocumentFace is null)
 					{
 						FailAll(Application, "Face not available in embedded Travel Document.");
 						return;
 					}
+
+					InterleavedImage TravelDocumentImage = J2kImage.FromBytes(TravelDocumentFace.ImageData);
+					TravelDocumentFaceBitmap = TravelDocumentImage.As<SKBitmap>();
 				}
 				catch (Exception ex)
 				{
@@ -544,10 +553,62 @@ namespace TAG.Identity.TravelDocuments
 							"FullNameInvalid", this);
 					}
 				}
+
+				// Validate Profile Photo
+
+				string DeepFaceUrl = await RuntimeSettings.GetAsync(typeof(ServiceModule).Namespace + ".DeepFaceUrl",
+					"http://localhost:5000/");
+
+				using DeepFaceClient DeepFace = new(DeepFaceUrl);
+				using SKImage TravelDocumentFaceImage = SKImage.FromBitmap(TravelDocumentFaceBitmap);
+
+				FaceRepresentation[] TravelDocumentRepresentations = await DeepFace.Represent(TravelDocumentFaceImage);
+
+				if (TravelDocumentRepresentations.Length == 0)
+				{
+					FailAll(Application, "No face detected in NFC document.");
+					return;
+				}
+				else if (TravelDocumentRepresentations.Length > 1)
+				{
+					FailAll(Application, "More than one face detected in NFC document.");
+					return;
+				}
+				else if (TravelDocumentRepresentations[0].FaceConfidence <.95)
+				{
+					FailAll(Application, "Photo in Travel Document too low quality.");
+					return;
+				}
+
+				FaceRepresentation[] ProfilePhotoRepresentations = await DeepFace.Represent(
+					ProfilePhoto.Binary, ProfilePhoto.ContentType);
+
+				if (ProfilePhotoRepresentations.Length == 0)
+				{
+					Application.PhotoInvalid(ProfilePhoto, "No face detected in profile photo.", "en",
+						"NoFace", this);
+				}
+				else if (ProfilePhotoRepresentations.Length > 1)
+				{
+					Application.PhotoInvalid(ProfilePhoto, "Multiple faces detected in profile photo.", "en",
+						"MultipleFaces", this);
+				}
+				else if (ProfilePhotoRepresentations[0].FaceConfidence < .95)
+				{
+					Application.PhotoInvalid(ProfilePhoto, "Low quality profile photo.", "en",
+						"LowQualityPhoto", this);
+				}
+				else
+				{
+				}
 			}
 			catch (Exception ex)
 			{
 				Application.ReportError(ex.Message, null, null, ValidationErrorType.Service, this);
+			}
+			finally
+			{
+				TravelDocumentFaceBitmap?.Dispose();
 			}
 		}
 

@@ -39,3 +39,6 @@ invalidates claims. The following table lists the error codes using by the servi
 | `LastNameInvalid`        | `Last name(s) invalid.`                                | The Identity application contains a last name claim (`LAST`) that does not match the last name(s) (primary identifier) in the travel document. |
 | `FirstNameInvalid`       | `First name(s) invalid.`                               | The Identity application contains a first name claim (`FIRST`) that does not match the first name(s) (secondary identifier) in the travel document. |
 | `FullNameInvalid`	       | `Full name invalid.`                                   | The Identity application contains a full name claim (`FULLNAME`) that does not match the full name in the travel document. |
+| `NoFace`			       | `No face detected in profile photo.`                   | A face could not be detected in the profile photo provided. |
+| `MultipleFaces`          | `Multiple faces detected in profile photo.`            | Multiple faces were detected in the profile photo provided. |
+| `LowQualityPhoto`        | `Low quality profile photo.`                           | The confidence level in the face provided in the profile photo is too low. |
