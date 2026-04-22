@@ -118,7 +118,7 @@ namespace TAG.Identity.TravelDocuments.Test
 			Assert.AreEqual(0, Application.UnvalidatedClaims.Length, "Application has unvalidated claims.");
 			Assert.AreEqual(0, Application.UnvalidatedPhotos.Length, "Application has unvalidated photos.");
 			Assert.IsTrue(Application.HasValidatedClaims, "Application has no validated claims.");
-			Assert.IsTrue(Application.HasValidatedPhotos, "Application is no validated photos.");
+			Assert.IsTrue(Application.HasValidatedPhotos, "Application has no validated photos.");
 			Assert.IsTrue(Application.IsValid, "Application is not valid.");
 		}
 

@@ -50,8 +50,16 @@ namespace TAG.Networking.DeepFace
 			"yunet",
 			"centerface"
 		];
+		private static readonly string[] distanceMetrics =
+		[
+			"cosine",
+			"euclidean",
+			"euclidean_l2",
+			"angular"
+		];
 		private readonly Uri endpoint;
 		private readonly Uri endpointRepresent;
+		private readonly Uri endpointVerify;
 
 		/// <summary>
 		/// DeepFace client.
@@ -71,6 +79,7 @@ namespace TAG.Networking.DeepFace
 		{
 			this.endpoint = Endpoint;
 			this.endpointRepresent = new Uri(this.endpoint, "/represent");
+			this.endpointVerify = new Uri(this.endpoint, "/verify");
 		}
 
 		/// <summary>
@@ -113,7 +122,7 @@ namespace TAG.Networking.DeepFace
 			DetectorBackend DetectorBackend, SKImage Image)
 		{
 			using SKData Data = Image.Encode(SKEncodedImageFormat.Png, 0);
-			return this.Represent(Model, DetectorBackend, Data.ToArray(), 
+			return this.Represent(Model, DetectorBackend, Data.ToArray(),
 				ImageCodec.ContentTypePng);
 		}
 
@@ -153,34 +162,15 @@ namespace TAG.Networking.DeepFace
 		public async Task<FaceRepresentation[]> Represent(FaceRecognitionModel Model,
 			DetectorBackend DetectorBackend, byte[] Image, string ImageContentType)
 		{
-			Dictionary<string, object> Request = new()
-			{
-				{ "model_name", modelNames[(int)Model] },
-				{ "detector_backend", detectorBackends[(int)DetectorBackend] },
-				{ "img", "data:" + ImageContentType+ ";base64," + Convert.ToBase64String(Image) }
-			};
+			object Response = await this.Request(this.endpointRepresent,
+				new Dictionary<string, object>()
+				{
+					{ "model_name", modelNames[(int)Model] },
+					{ "detector_backend", detectorBackends[(int)DetectorBackend] },
+					{ "img", "data:" + ImageContentType+ ";base64," + Convert.ToBase64String(Image) }
+				});
 
-			if (this.HasSniffers)
-			{
-				this.TransmitText("POST(" + this.endpointRepresent.ToString() + "):\r\n" +
-					JSON.Encode(Request, true));
-			}
-
-			ContentResponse Response = await InternetContent.PostAsync(
-				this.endpointRepresent, Request,
-				new KeyValuePair<string, string>("Accept", JsonCodec.DefaultContentType));
-
-			if (Response.HasError)
-			{
-				if (this.HasSniffers)
-					this.Error(Response.Error.Message);
-
-				Response.AssertOk();
-			}
-			else if (this.HasSniffers)
-				this.ReceiveText(JSON.Encode(Response.Decoded, true));
-
-			if (Response.Decoded is not Dictionary<string, object> ResponseObj ||
+			if (Response is not Dictionary<string, object> ResponseObj ||
 				!ResponseObj.TryGetValue("results", out object? Obj) ||
 				Obj is not Array Results)
 			{
@@ -256,6 +246,30 @@ namespace TAG.Networking.DeepFace
 			return Result;
 		}
 
+		public async Task<object> Request(Uri Endpoint, object Payload)
+		{
+			if (this.HasSniffers)
+			{
+				this.TransmitText("POST(" + Endpoint.ToString() + "):\r\n" +
+					JSON.Encode(Payload, true));
+			}
+
+			ContentResponse Response = await InternetContent.PostAsync(Endpoint, Payload,
+				new KeyValuePair<string, string>("Accept", JsonCodec.DefaultContentType));
+
+			if (Response.HasError)
+			{
+				if (this.HasSniffers)
+					this.Error(Response.Error.Message);
+
+				Response.AssertOk();
+			}
+			else if (this.HasSniffers)
+				this.ReceiveText(JSON.Encode(Response.Decoded, true));
+
+			return Response.Decoded;
+		}
+
 		private static bool TryParsePoint(object Obj, [NotNullWhen(true)] out SKPoint? Point)
 		{
 			if (Obj is Array A &&
@@ -272,5 +286,206 @@ namespace TAG.Networking.DeepFace
 				return false;
 			}
 		}
+
+		/// <summary>
+		/// Verifies the likeness of two faces in different images.
+		/// </summary>
+		/// <param name="Image">The image containing the faces.</param>
+		/// <returns>An array of face representations.</returns>
+		public Task<VerificationResult> Verify(SKImage Image1, SKImage Image2)
+		{
+			return this.Verify(FaceRecognitionModel.Facenet512, Image1, Image2);
+		}
+
+		/// <summary>
+		/// Verifies the likeness of two faces in different images.
+		/// </summary>
+		/// <param name="Model">Face recognition model</param>
+		/// <param name="Image">The image containing the faces.</param>
+		/// <returns>An array of face representations.</returns>
+		public Task<VerificationResult> Verify(FaceRecognitionModel Model,
+			SKImage Image1, SKImage Image2)
+		{
+			return this.Verify(Model, DetectorBackend.RetinaFace, Image1, Image2);
+		}
+
+		/// <summary>
+		/// Verifies the likeness of two faces in different images.
+		/// </summary>
+		/// <param name="Model">Face recognition model</param>
+		/// <param name="DetectorBackend">Detector backend</param>
+		/// <param name="Image">The image containing the faces.</param>
+		/// <returns>An array of face representations.</returns>
+		public Task<VerificationResult> Verify(FaceRecognitionModel Model,
+			DetectorBackend DetectorBackend, SKImage Image1, SKImage Image2)
+		{
+			using SKData Data1 = Image1.Encode(SKEncodedImageFormat.Png, 0);
+			using SKData Data2 = Image2.Encode(SKEncodedImageFormat.Png, 0);
+			return this.Verify(Model, DetectorBackend, 
+				Data1.ToArray(), ImageCodec.ContentTypePng,
+				Data2.ToArray(), ImageCodec.ContentTypePng);
+		}
+
+		/// <summary>
+		/// Verifies the likeness of two faces in different images.
+		/// </summary>
+		/// <param name="Image">The image containing the faces.</param>
+		/// <param name="ImageContentType">Image Content-Type</param>
+		/// <returns>An array of face representations.</returns>
+		public Task<VerificationResult> Verify(byte[] Image1, string Image1ContentType,
+			byte[] Image2, string Image2ContentType)
+		{
+			return this.Verify(FaceRecognitionModel.Facenet512, 
+				Image1, Image1ContentType, Image2, Image2ContentType);
+		}
+
+		/// <summary>
+		/// Verifies the likeness of two faces in different images.
+		/// </summary>
+		/// <param name="Model">Face recognition model</param>
+		/// <param name="Image">The image containing the faces.</param>
+		/// <param name="ImageContentType">Image Content-Type</param>
+		/// <returns>An array of face representations.</returns>
+		public Task<VerificationResult> Verify(FaceRecognitionModel Model,
+			byte[] Image1, string Image1ContentType,
+			byte[] Image2, string Image2ContentType)
+		{
+			return this.Verify(Model, DetectorBackend.RetinaFace, 
+				Image1, Image1ContentType, Image2, Image2ContentType);
+		}
+
+		/// <summary>
+		/// Verifies the likeness of two faces in different images.
+		/// </summary>
+		/// <param name="Model">Face recognition model</param>
+		/// <param name="DetectorBackend">Detector backend</param>
+		/// <param name="Image">The image containing the faces.</param>
+		/// <param name="ImageContentType">Image Content-Type</param>
+		/// <returns>An array of face representations.</returns>
+		public Task<VerificationResult> Verify(FaceRecognitionModel Model,
+			DetectorBackend DetectorBackend, byte[] Image1, string Image1ContentType,
+			byte[] Image2, string Image2ContentType)
+		{
+			return this.Verify(Model,DetectorBackend, DistanceMetric.EuclideanL2,
+				Image1, Image1ContentType, Image2, Image2ContentType);
+		}
+		
+		/// <summary>
+		/// Verifies the likeness of two faces in different images.
+		/// </summary>
+		/// <param name="DistanceMetric">The distance metric to use for verification.</param>
+		/// <param name="Image">The image containing the faces.</param>
+		/// <returns>An array of face representations.</returns>
+		public Task<VerificationResult> Verify(DistanceMetric DistanceMetric,
+			SKImage Image1, SKImage Image2)
+		{
+			return this.Verify(FaceRecognitionModel.Facenet512, DistanceMetric,
+				Image1, Image2);
+		}
+
+		/// <summary>
+		/// Verifies the likeness of two faces in different images.
+		/// </summary>
+		/// <param name="Model">Face recognition model</param>
+		/// <param name="DistanceMetric">The distance metric to use for verification.</param>
+		/// <param name="Image">The image containing the faces.</param>
+		/// <returns>An array of face representations.</returns>
+		public Task<VerificationResult> Verify(FaceRecognitionModel Model,
+			DistanceMetric DistanceMetric, SKImage Image1, SKImage Image2)
+		{
+			return this.Verify(Model, DetectorBackend.RetinaFace, DistanceMetric,
+				Image1, Image2);
+		}
+
+		/// <summary>
+		/// Verifies the likeness of two faces in different images.
+		/// </summary>
+		/// <param name="Model">Face recognition model</param>
+		/// <param name="DetectorBackend">Detector backend</param>
+		/// <param name="DistanceMetric">The distance metric to use for verification.</param>
+		/// <param name="Image">The image containing the faces.</param>
+		/// <returns>An array of face representations.</returns>
+		public Task<VerificationResult> Verify(FaceRecognitionModel Model,
+			DetectorBackend DetectorBackend, DistanceMetric DistanceMetric,
+			SKImage Image1, SKImage Image2)
+		{
+			using SKData Data1 = Image1.Encode(SKEncodedImageFormat.Png, 0);
+			using SKData Data2 = Image2.Encode(SKEncodedImageFormat.Png, 0);
+			return this.Verify(Model, DetectorBackend, DistanceMetric,
+				Data1.ToArray(), ImageCodec.ContentTypePng,
+				Data2.ToArray(), ImageCodec.ContentTypePng);
+		}
+
+		/// <summary>
+		/// Verifies the likeness of two faces in different images.
+		/// </summary>
+		/// <param name="DistanceMetric">The distance metric to use for verification.</param>
+		/// <param name="Image">The image containing the faces.</param>
+		/// <param name="ImageContentType">Image Content-Type</param>
+		/// <returns>An array of face representations.</returns>
+		public Task<VerificationResult> Verify(DistanceMetric DistanceMetric,
+			byte[] Image1, string Image1ContentType,
+			byte[] Image2, string Image2ContentType)
+		{
+			return this.Verify(FaceRecognitionModel.Facenet512, DistanceMetric,
+				Image1, Image1ContentType, Image2, Image2ContentType);
+		}
+
+		/// <summary>
+		/// Verifies the likeness of two faces in different images.
+		/// </summary>
+		/// <param name="Model">Face recognition model</param>
+		/// <param name="DistanceMetric">The distance metric to use for verification.</param>
+		/// <param name="Image">The image containing the faces.</param>
+		/// <param name="ImageContentType">Image Content-Type</param>
+		/// <returns>An array of face representations.</returns>
+		public Task<VerificationResult> Verify(FaceRecognitionModel Model,
+			DistanceMetric DistanceMetric, byte[] Image1, string Image1ContentType,
+			byte[] Image2, string Image2ContentType)
+		{
+			return this.Verify(Model, DetectorBackend.RetinaFace, DistanceMetric,
+				Image1, Image1ContentType, Image2, Image2ContentType);
+		}
+
+		/// <summary>
+		/// Verifies the likeness of two faces in different images.
+		/// </summary>
+		/// <param name="Model">Face recognition model</param>
+		/// <param name="DetectorBackend">Detector backend</param>
+		/// <param name="DistanceMetric">The distance metric to use for verification.</param>
+		/// <param name="Image">The image containing the faces.</param>
+		/// <param name="ImageContentType">Image Content-Type</param>
+		/// <returns>An array of face representations.</returns>
+		public async Task<VerificationResult> Verify(FaceRecognitionModel Model,
+			DetectorBackend DetectorBackend, DistanceMetric DistanceMetric,
+			byte[] Image1, string Image1ContentType,
+			byte[] Image2, string Image2ContentType)
+		{
+			object Response = await this.Request(this.endpointVerify,
+				new Dictionary<string, object>()
+				{
+					{ "model_name", modelNames[(int)Model] },
+					{ "detector_backend", detectorBackends[(int)DetectorBackend] },
+					{ "distance_metric", distanceMetrics[(int)DistanceMetric] },
+					{ "img1", "data:" + Image1ContentType+ ";base64," + Convert.ToBase64String(Image1) },
+					{ "img2", "data:" + Image2ContentType+ ";base64," + Convert.ToBase64String(Image2) }
+				});
+
+			if (Response is not Dictionary<string, object> ResponseObj ||
+				!ResponseObj.TryGetValue("confidence", out object? Obj) || 
+				Obj is not double Confidence ||
+				!ResponseObj.TryGetValue("distance", out Obj) ||
+				Obj is not double Distance ||
+				!ResponseObj.TryGetValue("threshold", out Obj) ||
+				Obj is not double Threshold ||
+				!ResponseObj.TryGetValue("verified", out Obj) ||
+				Obj is not bool Verified)
+			{
+				throw new Exception("Unexpected response format.");
+			}
+
+			return new VerificationResult(Confidence, Distance, Threshold, Verified);
+		}
+
 	}
 }

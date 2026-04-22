@@ -574,7 +574,7 @@ namespace TAG.Identity.TravelDocuments
 					FailAll(Application, "More than one face detected in NFC document.");
 					return;
 				}
-				else if (TravelDocumentRepresentations[0].FaceConfidence <.95)
+				else if (TravelDocumentRepresentations[0].FaceConfidence < .95)
 				{
 					FailAll(Application, "Photo in Travel Document too low quality.");
 					return;
@@ -600,6 +600,22 @@ namespace TAG.Identity.TravelDocuments
 				}
 				else
 				{
+					double Distance = ComputeNormalizedEuclideanDistance(
+						TravelDocumentRepresentations[0].Embedding,
+						ProfilePhotoRepresentations[0].Embedding);
+
+					using SKData Data = TravelDocumentFaceImage.Encode(SKEncodedImageFormat.Png, 0);
+
+					VerificationResult Result = await DeepFace.Verify(DistanceMetric.EuclideanL2, Data.ToArray(),
+						"image/png", ProfilePhoto.Binary, ProfilePhoto.ContentType);
+
+					if (Distance > 1.04)	// Facenet512, with Euclidean L2 Norm, typical threshold.
+					{
+						Application.PhotoInvalid(ProfilePhoto, "Profile photo does not match photo in Travel Document.", "en",
+							"PhotoMismatch", this);
+					}
+					else
+						Application.PhotoValid(ProfilePhoto, this);
 				}
 			}
 			catch (Exception ex)
@@ -610,6 +626,70 @@ namespace TAG.Identity.TravelDocuments
 			{
 				TravelDocumentFaceBitmap?.Dispose();
 			}
+		}
+
+		/// <summary>
+		/// Computes the Euclidean L2 norm distance between two vectors, of potentially 
+		/// different lengths. If the vectors are of different lengths, the missing values 
+		/// are considered to be zero.
+		/// </summary>
+		/// <param name="V1">The first vector.</param>
+		/// <param name="V2">The second vector.</param>
+		/// <returns>The Euclidean distance between the two vectors.</returns>
+		public static double ComputeNormalizedEuclideanDistance(double[] V1, double[] V2)
+		{
+			double l1 = 0;
+			double l2 = 0;
+
+			double d = 0;
+			int c1 = V1.Length;
+			int c2 = V2.Length;
+			int c = Math.Min(c1, c2);
+			double v;
+			int i;
+
+			for (i = 0; i < c1; i++)
+			{
+				v = V1[i];
+				l1 += v * v;
+			}
+
+			for (i = 0; i < c2; i++)
+			{
+				v = V2[i];
+				l2 += v * v;
+			}
+
+			if (l1 == 0 || l2 == 0)
+				return double.MaxValue;
+
+			l1 = 1.0 / Math.Sqrt(l1);
+			l2 = 1.0 / Math.Sqrt(l2);
+
+			for (i = 0; i < c; i++)
+			{
+				v = (V1[i] * l1) - (V2[i] * l2);
+				d += v * v;
+			}
+
+			if (i < c1)
+			{
+				for (; i < c1; i++)
+				{
+					v = V1[i] * l1;
+					d += v * v;
+				}
+			}
+			else if (i < c2)
+			{
+				for (; i < c2; i++)
+				{
+					v = V2[i] * l2;
+					d += v * v;
+				}
+			}
+
+			return Math.Sqrt(d);
 		}
 
 		private static string Append(string[] Names)
