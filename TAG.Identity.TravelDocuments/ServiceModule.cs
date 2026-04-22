@@ -6,6 +6,7 @@ using Paiwise;
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using System.Text;
 using System.Threading.Tasks;
 using System.Xml;
@@ -106,6 +107,10 @@ namespace TAG.Identity.TravelDocuments
 			if (string.IsNullOrEmpty(PreviewId))
 				return Grade.NotAtAll;
 
+			IPhoto ProfilePhoto = GetProfilePhoto(Application);
+			if (ProfilePhoto is null)
+				return Grade.NotAtAll;
+
 			KeyValuePair<XmlDocument, DocumentInformation> P = GetNfcDocument(Application);
 
 			if (P.Key is null || P.Value is null)
@@ -118,11 +123,27 @@ namespace TAG.Identity.TravelDocuments
 		{
 			foreach (KeyValuePair<string, object> Claim in Application.Claims)
 			{
-				if (Claim.Key == "PREVIEW" && Claim.Value is string s)
+				if (Claim.Key == PersonalInformation.PreviewTag && Claim.Value is string s)
 					return s;
 			}
 
 			return string.Empty;
+		}
+
+		private static IPhoto GetProfilePhoto(IIdentityApplication Application)
+		{
+			foreach (IPhoto Photo in Application.Photos)
+			{
+				string FileName = Path.GetFileName(Photo.FileName);
+				int i = FileName.IndexOf('.');
+				if (i >= 0)
+					FileName = FileName[..i];
+
+				if (FileName == "ProfilePhoto")
+					return Photo;
+			}
+
+			return null;
 		}
 
 		private static KeyValuePair<XmlDocument, DocumentInformation> GetNfcDocument(IIdentityApplication Application)
@@ -164,6 +185,10 @@ namespace TAG.Identity.TravelDocuments
 			{
 				string PreviewId = GetPreviewId(Application);
 				if (string.IsNullOrEmpty(PreviewId))
+					return;
+
+				IPhoto ProfilePhoto = GetProfilePhoto(Application);
+				if (ProfilePhoto is null)
 					return;
 
 				KeyValuePair<XmlDocument, DocumentInformation> P = GetNfcDocument(Application);
@@ -256,9 +281,9 @@ namespace TAG.Identity.TravelDocuments
 				{
 					if (BirthDate > DateTime.Today)
 					{
-						Application.ClaimInvalid("BDAY", "Future birth date.", "en", "FutureBirthDate", this);
-						Application.ClaimInvalid("BMONTH", "Future birth date.", "en", "FutureBirthDate", this);
-						Application.ClaimInvalid("BYEAR", "Future birth date.", "en", "FutureBirthDate", this);
+						Application.ClaimInvalid(PersonalInformation.BirthDayTag, "Future birth date.", "en", "FutureBirthDate", this);
+						Application.ClaimInvalid(PersonalInformation.BirthMonthTag, "Future birth date.", "en", "FutureBirthDate", this);
+						Application.ClaimInvalid(PersonalInformation.BirthYearTag, "Future birth date.", "en", "FutureBirthDate", this);
 					}
 					else if (!string.IsNullOrEmpty(DocInfo.DateOfBirth) &&
 						DocInfo.DateOfBirth.Length == 6 &&
@@ -267,27 +292,27 @@ namespace TAG.Identity.TravelDocuments
 						int.TryParse(DocInfo.DateOfBirth[4..6], out int BirthDay))
 					{
 						if (BirthDay == BirthDate.Value.Day)
-							Application.ClaimValid("BDAY", this);
+							Application.ClaimValid(PersonalInformation.BirthDayTag, this);
 						else
-							Application.ClaimInvalid("BDAY", "Birth Day invalid.", "en", "BirthDayInvalid", this);
+							Application.ClaimInvalid(PersonalInformation.BirthDayTag, "Birth Day invalid.", "en", "BirthDayInvalid", this);
 
 						if (BirthMonth == BirthDate.Value.Month)
-							Application.ClaimValid("BMONTH", this);
+							Application.ClaimValid(PersonalInformation.BirthMonthTag, this);
 						else
-							Application.ClaimInvalid("BMONTH", "Birth Month invalid.", "en", "BirthMonthInvalid", this);
+							Application.ClaimInvalid(PersonalInformation.BirthMonthTag, "Birth Month invalid.", "en", "BirthMonthInvalid", this);
 
 						if (BirthYear == (BirthDate.Value.Year % 100))
-							Application.ClaimValid("BYEAR", this);
+							Application.ClaimValid(PersonalInformation.BirthYearTag, this);
 						else
-							Application.ClaimInvalid("BYEAR", "Birth Year invalid.", "en", "BirthYearInvalid", this);
+							Application.ClaimInvalid(PersonalInformation.BirthYearTag, "Birth Year invalid.", "en", "BirthYearInvalid", this);
 					}
 
 					if (PersonalInfo.AgeAbove.HasValue)
 					{
 						if (PersonalInfo.Age >= PersonalInfo.AgeAbove.Value)
-							Application.ClaimValid("AGEABOVE", this);
+							Application.ClaimValid(PersonalInformation.AgeAboveTag, this);
 						else
-							Application.ClaimInvalid("AGEABOVE", "Age not reached.", "en", "AgeNotReached", this);
+							Application.ClaimInvalid(PersonalInformation.AgeAboveTag, "Age not reached.", "en", "AgeNotReached", this);
 					}
 				}
 				else if (PersonalInfo.AgeAbove.HasValue &&
@@ -314,9 +339,9 @@ namespace TAG.Identity.TravelDocuments
 						int Age = Duration.GetDurationBetween(BirthDate2, DateTime.Today).Years;
 
 						if (Age >= PersonalInfo.AgeAbove.Value)
-							Application.ClaimValid("AGEABOVE", this);
+							Application.ClaimValid(PersonalInformation.AgeAboveTag, this);
 						else
-							Application.ClaimInvalid("AGEABOVE", "Age not reached.", "en", "AgeNotReached", this);
+							Application.ClaimInvalid(PersonalInformation.AgeAboveTag, "Age not reached.", "en", "AgeNotReached", this);
 					}
 					catch (Exception ex)
 					{
@@ -329,18 +354,18 @@ namespace TAG.Identity.TravelDocuments
 					!string.IsNullOrEmpty(DocInfo.IssuingState))
 				{
 					if (ISO_3166_1.CompareCountryCode(PersonalInfo.Country, DocInfo.IssuingState))
-						Application.ClaimValid("COUNTRY", this);
+						Application.ClaimValid(PersonalInformation.CountryTag, this);
 					else
-						Application.ClaimInvalid("COUNTRY", "Country invalid.", "en", "CountryCodeMismatch", this);
+						Application.ClaimInvalid(PersonalInformation.CountryTag, "Country invalid.", "en", "CountryCodeMismatch", this);
 				}
 
 				if (!CaseInsensitiveString.IsNullOrEmpty(PersonalInfo.Nationality) &&
 					!string.IsNullOrEmpty(DocInfo.Nationality))
 				{
 					if (ISO_3166_1.CompareCountryCode(PersonalInfo.Nationality, DocInfo.Nationality))
-						Application.ClaimValid("NATIONALITY", this);
+						Application.ClaimValid(PersonalInformation.NationalityTag, this);
 					else
-						Application.ClaimInvalid("NATIONALITY", "Nationality invalid.", "en", "NationalityInvalid", this);
+						Application.ClaimInvalid(PersonalInformation.NationalityTag, "Nationality invalid.", "en", "NationalityInvalid", this);
 				}
 
 				if (PersonalInfo.Gender.HasValue && !string.IsNullOrEmpty(DocInfo.Gender))
@@ -355,9 +380,9 @@ namespace TAG.Identity.TravelDocuments
 					if (ExpectedGender.HasValue)
 					{
 						if (PersonalInfo.Gender.Value == ExpectedGender.Value)
-							Application.ClaimValid("GENDER", this);
+							Application.ClaimValid(PersonalInformation.GenderTag, this);
 						else
-							Application.ClaimInvalid("GENDER", "Gender invalid.", "en", "GenderInvalid", this);
+							Application.ClaimInvalid(PersonalInformation.GenderTag, "Gender invalid.", "en", "GenderInvalid", this);
 					}
 				}
 
@@ -382,13 +407,13 @@ namespace TAG.Identity.TravelDocuments
 							if (Valid.HasValue)
 							{
 								if (!Valid.Value)
-									Application.ClaimInvalid("PNR", "Personal number invalid according to national rules.", "en", "PersonalNumberInvalid", this);
+									Application.ClaimInvalid(PersonalInformation.PersonalNumberTag, "Personal number invalid according to national rules.", "en", "PersonalNumberInvalid", this);
 								else
 								{
 									string NormalizedPNr = await PNrValidator.Normalize(Country, PersonalInfo.PersonalNumber);
 
 									if (NormalizedPNr != PersonalInfo.PersonalNumber)
-										Application.ClaimInvalid("PNR", "Personal number not normalized.", "en", "PNrNotNormalized", this);
+										Application.ClaimInvalid(PersonalInformation.PersonalNumberTag, "Personal number not normalized.", "en", "PNrNotNormalized", this);
 									else
 									{
 										bool? AdditionalInfoAsPNr = null;
@@ -420,7 +445,7 @@ namespace TAG.Identity.TravelDocuments
 											(OptionalDataAsPNr ?? false) ||
 											(DocumentNrAsPNr ?? false))
 										{
-											Application.ClaimValid("PNR", this);
+											Application.ClaimValid(PersonalInformation.PersonalNumberTag, this);
 										}
 
 
@@ -428,7 +453,7 @@ namespace TAG.Identity.TravelDocuments
 											!(OptionalDataAsPNr ?? true) ||
 											!(DocumentNrAsPNr ?? true))
 										{
-											Application.ClaimInvalid("PNR", "Personal number does not match.", "en", "PersonalNumberMismatch", this);
+											Application.ClaimInvalid(PersonalInformation.PersonalNumberTag, "Personal number does not match.", "en", "PersonalNumberMismatch", this);
 										}
 									}
 								}
@@ -436,29 +461,29 @@ namespace TAG.Identity.TravelDocuments
 						}
 					}
 					else
-						Application.ClaimInvalid("PNR", "Country not specified, or available in MRZ.", "en", "CountryNotSpecified", this);
+						Application.ClaimInvalid(PersonalInformation.PersonalNumberTag, "Country not specified, or available in MRZ.", "en", "CountryNotSpecified", this);
 				}
 
 				string PrimaryIdentifier = Append(DocInfo.PrimaryIdentifier);
 				if (!string.IsNullOrEmpty(PrimaryIdentifier))
 				{
 					if (IcaoNameComparer.AreNamesSimilar(PrimaryIdentifier, PersonalInfo.LastNames))
-						Application.ClaimValid("LAST", this);
+						Application.ClaimValid(PersonalInformation.LastNamesTag, this);
 					else if (IcaoNameComparer.AreNamesSimilar(PrimaryIdentifier,
 						PersonalInfo.MiddleNames + " " + PersonalInfo.LastNames))
 					{
-						Application.ClaimValid("MIDDLE", this);
-						Application.ClaimValid("LAST", this);
+						Application.ClaimValid(PersonalInformation.MiddleNamesTag, this);
+						Application.ClaimValid(PersonalInformation.LastNamesTag, this);
 					}
 					else if (IcaoNameComparer.AreNamesSimilar(PrimaryIdentifier,
 						PersonalInfo.LastNames + " " + PersonalInfo.MiddleNames))
 					{
-						Application.ClaimValid("MIDDLE", this);
-						Application.ClaimValid("LAST", this);
+						Application.ClaimValid(PersonalInformation.MiddleNamesTag, this);
+						Application.ClaimValid(PersonalInformation.LastNamesTag, this);
 					}
 					else if (!CaseInsensitiveString.IsNullOrEmpty(PersonalInfo.LastNames))
 					{
-						Application.ClaimInvalid("LAST", "Last name(s) invalid.", "en",
+						Application.ClaimInvalid(PersonalInformation.LastNamesTag, "Last name(s) invalid.", "en",
 							"LastNameInvalid", this);
 					}
 				}
@@ -467,22 +492,22 @@ namespace TAG.Identity.TravelDocuments
 				if (!string.IsNullOrEmpty(SecondaryIdentifier))
 				{
 					if (IcaoNameComparer.AreNamesSimilar(SecondaryIdentifier, PersonalInfo.FirstName))
-						Application.ClaimValid("FIRST", this);
+						Application.ClaimValid(PersonalInformation.FirstNameTag, this);
 					else if (IcaoNameComparer.AreNamesSimilar(SecondaryIdentifier,
 						PersonalInfo.FirstName + " " + PersonalInfo.MiddleNames))
 					{
-						Application.ClaimValid("FIRST", this);
-						Application.ClaimValid("MIDDLE", this);
+						Application.ClaimValid(PersonalInformation.FirstNameTag, this);
+						Application.ClaimValid(PersonalInformation.MiddleNamesTag, this);
 					}
 					else if (IcaoNameComparer.AreNamesSimilar(SecondaryIdentifier,
 						PersonalInfo.MiddleNames + " " + PersonalInfo.FirstName))
 					{
-						Application.ClaimValid("FIRST", this);
-						Application.ClaimValid("MIDDLE", this);
+						Application.ClaimValid(PersonalInformation.FirstNameTag, this);
+						Application.ClaimValid(PersonalInformation.MiddleNamesTag, this);
 					}
 					else if (!CaseInsensitiveString.IsNullOrEmpty(PersonalInfo.FirstName))
 					{
-						Application.ClaimInvalid("FIRST", "First name(s) invalid.", "en",
+						Application.ClaimInvalid(PersonalInformation.FirstNameTag, "First name(s) invalid.", "en",
 							"FirstNameInvalid", this);
 					}
 				}
@@ -492,20 +517,20 @@ namespace TAG.Identity.TravelDocuments
 					if (IcaoNameComparer.AreNamesSimilar(AdditionalDetails.FullName,
 						PersonalInfo.FullName))
 					{
-						Application.ClaimValid("FULLNAME", this);
-						Application.ClaimValid("FIRST", this);
-						Application.ClaimValid("MIDDLE", this);
-						Application.ClaimValid("LAST", this);
+						Application.ClaimValid(PersonalInformation.FullNameTag, this);
+						Application.ClaimValid(PersonalInformation.FirstNameTag, this);
+						Application.ClaimValid(PersonalInformation.MiddleNamesTag, this);
+						Application.ClaimValid(PersonalInformation.LastNamesTag, this);
 					}
 					else
 					{
-						Application.ClaimInvalid("FULLNAME", "Full name invalid.", "en",
+						Application.ClaimInvalid(PersonalInformation.FullNameTag, "Full name invalid.", "en",
 							"FullNameInvalid", this);
-						Application.ClaimInvalid("FIRST", "Full name invalid.", "en",
+						Application.ClaimInvalid(PersonalInformation.FirstNameTag, "Full name invalid.", "en",
 							"FullNameInvalid", this);
-						Application.ClaimInvalid("MIDDLE", "Full name invalid.", "en",
+						Application.ClaimInvalid(PersonalInformation.MiddleNamesTag, "Full name invalid.", "en",
 							"FullNameInvalid", this);
-						Application.ClaimInvalid("LAST", "Full name invalid.", "en",
+						Application.ClaimInvalid(PersonalInformation.LastNamesTag, "Full name invalid.", "en",
 							"FullNameInvalid", this);
 					}
 				}
