@@ -439,34 +439,103 @@ namespace TAG.Identity.TravelDocuments
 						Application.ClaimInvalid("PNR", "Country not specified, or available in MRZ.", "en", "CountryNotSpecified", this);
 				}
 
-				/*
-				foreach (KeyValuePair<string, object> P2 in Application.Claims)
+				string PrimaryIdentifier = Append(DocInfo.PrimaryIdentifier);
+				if (!string.IsNullOrEmpty(PrimaryIdentifier))
 				{
-					switch (P2.Key)
+					if (IcaoNameComparer.AreNamesSimilar(PrimaryIdentifier, PersonalInfo.LastNames))
+						Application.ClaimValid("LAST", this);
+					else if (IcaoNameComparer.AreNamesSimilar(PrimaryIdentifier,
+						PersonalInfo.MiddleNames + " " + PersonalInfo.LastNames))
 					{
-						case "FIRST":
-							Result.FirstName = P.Value.ToString();
-							break;
-
-						case "MIDDLE":
-							Result.MiddleNames = P.Value.ToString();
-							break;
-
-						case "LAST":
-							Result.LastNames = P.Value.ToString();
-							break;
-
-						case "FULLNAME":
-							Result.FullName = P.Value.ToString();
-							break;
+						Application.ClaimValid("MIDDLE", this);
+						Application.ClaimValid("LAST", this);
+					}
+					else if (IcaoNameComparer.AreNamesSimilar(PrimaryIdentifier,
+						PersonalInfo.LastNames + " " + PersonalInfo.MiddleNames))
+					{
+						Application.ClaimValid("MIDDLE", this);
+						Application.ClaimValid("LAST", this);
+					}
+					else if (!CaseInsensitiveString.IsNullOrEmpty(PersonalInfo.LastNames))
+					{
+						Application.ClaimInvalid("LAST", "Last name(s) invalid.", "en",
+							"LastNameInvalid", this);
 					}
 				}
-				*/
+
+				string SecondaryIdentifier = Append(DocInfo.SecondaryIdentifier);
+				if (!string.IsNullOrEmpty(SecondaryIdentifier))
+				{
+					if (IcaoNameComparer.AreNamesSimilar(SecondaryIdentifier, PersonalInfo.FirstName))
+						Application.ClaimValid("FIRST", this);
+					else if (IcaoNameComparer.AreNamesSimilar(SecondaryIdentifier,
+						PersonalInfo.FirstName + " " + PersonalInfo.MiddleNames))
+					{
+						Application.ClaimValid("FIRST", this);
+						Application.ClaimValid("MIDDLE", this);
+					}
+					else if (IcaoNameComparer.AreNamesSimilar(SecondaryIdentifier,
+						PersonalInfo.MiddleNames + " " + PersonalInfo.FirstName))
+					{
+						Application.ClaimValid("FIRST", this);
+						Application.ClaimValid("MIDDLE", this);
+					}
+					else if (!CaseInsensitiveString.IsNullOrEmpty(PersonalInfo.FirstName))
+					{
+						Application.ClaimInvalid("FIRST", "First name(s) invalid.", "en",
+							"FirstNameInvalid", this);
+					}
+				}
+
+				if (!string.IsNullOrEmpty(AdditionalDetails?.FullName))
+				{
+					if (IcaoNameComparer.AreNamesSimilar(AdditionalDetails.FullName,
+						PersonalInfo.FullName))
+					{
+						Application.ClaimValid("FULLNAME", this);
+						Application.ClaimValid("FIRST", this);
+						Application.ClaimValid("MIDDLE", this);
+						Application.ClaimValid("LAST", this);
+					}
+					else
+					{
+						Application.ClaimInvalid("FULLNAME", "Full name invalid.", "en",
+							"FullNameInvalid", this);
+						Application.ClaimInvalid("FIRST", "Full name invalid.", "en",
+							"FullNameInvalid", this);
+						Application.ClaimInvalid("MIDDLE", "Full name invalid.", "en",
+							"FullNameInvalid", this);
+						Application.ClaimInvalid("LAST", "Full name invalid.", "en",
+							"FullNameInvalid", this);
+					}
+				}
 			}
 			catch (Exception ex)
 			{
 				Application.ReportError(ex.Message, null, null, ValidationErrorType.Service, this);
 			}
+		}
+
+		private static string Append(string[] Names)
+		{
+			int c = Names?.Length ?? 0;
+			if (c == 0)
+				return null;
+
+			if (c == 1)
+				return Names[0];
+
+			StringBuilder sb = new StringBuilder();
+
+			for (int i = 0; i < c; i++)
+			{
+				if (i > 0)
+					sb.Append(' ');
+
+				sb.Append(Names[i]);
+			}
+
+			return sb.ToString();
 		}
 
 		private static void FailAll(IIdentityApplication Application, string Message)
