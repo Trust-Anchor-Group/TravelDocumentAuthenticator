@@ -186,7 +186,7 @@ namespace TAG.Networking.DeepFace
 					!RepresentationObj.TryGetValue("embedding", out Obj) ||
 					Obj is not Array Embedding ||
 					!RepresentationObj.TryGetValue("face_confidence", out Obj) ||
-					Obj is not double FaceConfidence ||
+					!IsDouble(Obj, out double FaceConfidence) ||
 					!RepresentationObj.TryGetValue("facial_area", out Obj) ||
 					Obj is not Dictionary<string, object> FacialArea ||
 					!FacialArea.TryGetValue("h", out Obj) || Obj is not int Height ||
@@ -202,7 +202,7 @@ namespace TAG.Networking.DeepFace
 
 				for (j = 0; j < d; j++)
 				{
-					if (Embedding.GetValue(j) is double d2)
+					if (IsDouble(Embedding.GetValue(j), out double d2))
 						EmbeddingValues[j] = d2;
 					else
 						throw new IOException("Unexpected value in embedding.");
@@ -244,6 +244,31 @@ namespace TAG.Networking.DeepFace
 			}
 
 			return Result;
+		}
+
+		/// <summary>
+		/// Checks if the given object is a double, or an int that can be safely converted to a double.
+		/// </summary>
+		/// <param name="Obj">The object to check.</param>
+		/// <param name="Value">The resulting double value if the object is a double or an int.</param>
+		/// <returns>True if the object is a double or an int, otherwise false.</returns>
+		public static bool IsDouble(object? Obj, out double Value)
+		{
+			if (Obj is double d)
+			{
+				Value = d;
+				return true;
+			}
+			else if (Obj is int i)
+			{
+				Value = i;
+				return true;
+			}
+			else
+			{
+				Value = 0;
+				return false;
+			}
 		}
 
 		public async Task<object> Request(Uri Endpoint, object Payload)
@@ -473,11 +498,11 @@ namespace TAG.Networking.DeepFace
 
 			if (Response is not Dictionary<string, object> ResponseObj ||
 				!ResponseObj.TryGetValue("confidence", out object? Obj) || 
-				Obj is not double Confidence ||
+				!IsDouble(Obj, out double Confidence) ||
 				!ResponseObj.TryGetValue("distance", out Obj) ||
-				Obj is not double Distance ||
+				!IsDouble(Obj, out double Distance) ||
 				!ResponseObj.TryGetValue("threshold", out Obj) ||
-				Obj is not double Threshold ||
+				!IsDouble(Obj, out double Threshold) ||
 				!ResponseObj.TryGetValue("verified", out Obj) ||
 				Obj is not bool Verified)
 			{

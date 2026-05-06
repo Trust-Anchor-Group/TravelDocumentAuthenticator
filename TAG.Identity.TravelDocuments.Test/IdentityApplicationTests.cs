@@ -15,6 +15,7 @@ using Waher.Script;
 namespace TAG.Identity.TravelDocuments.Test
 {
 	[TestClass]
+	[DoNotParallelize]
 	public sealed class IdentityApplicationTests
 	{
 		private static ServiceModule? module;
@@ -79,7 +80,7 @@ namespace TAG.Identity.TravelDocuments.Test
 				"urn:nf:iot:leg:id:1.0", true, PI,
 				await LoadClaims(Folder,ClaimsFile),
 				[
-					await LoadPhoto(Folder, PhotoFile)
+					await LoadProfilePhoto(Folder, PhotoFile)
 				],
 				[
 					LoadDocument(Folder, NfcFile)
@@ -101,7 +102,7 @@ namespace TAG.Identity.TravelDocuments.Test
 				"urn:nf:iot:leg:id:1.0", true, PI,
 				await LoadClaims(Folder, ClaimsFile),
 				[
-					await LoadPhoto(Folder, PhotoFile)
+					await LoadProfilePhoto(Folder, PhotoFile)
 				],
 				[
 					LoadDocument(Folder, NfcFile)
@@ -110,16 +111,60 @@ namespace TAG.Identity.TravelDocuments.Test
 
 			Assert.IsTrue(module!.Supports(Application) > Grade.NotAtAll);
 
-			await module.Validate(Application);
+			double? Distance = await module.ValidateDistance(Application);
+			Assert.IsFalse(Application.HasErrors, Application.FirstError?.ErrorMessage ?? "Unspecified error");
+		
+			Assert.IsTrue(Distance.HasValue, "Distance not evaluated.");
+			Console.Out.WriteLine(Distance.Value);
 
 			Application.ClaimValid("PREVIEW", this);
 
-			Assert.IsFalse(Application.HasErrors, "Application has errors.");
 			Assert.AreEqual(0, Application.UnvalidatedClaims.Length, "Application has unvalidated claims.");
 			Assert.AreEqual(0, Application.UnvalidatedPhotos.Length, "Application has unvalidated photos.");
 			Assert.IsTrue(Application.HasValidatedClaims, "Application has no validated claims.");
 			Assert.IsTrue(Application.HasValidatedPhotos, "Application has no validated photos.");
 			Assert.IsTrue(Application.IsValid, "Application is not valid.");
+		}
+
+		[TestMethod]
+		[DataRow("Passport01", "Claims.json", "PassportPhoto.png", "NFC.xml")]
+		[DataRow("Passport01", "Claims.json", "PassportPhotoBlackWhite.png", "NFC.xml")]
+		[DataRow("Passport01", "Claims.json", "PassportPhotoCropped.png", "NFC.xml")]
+		[DataRow("Passport01", "Claims.json", "PassportPhotoRotated.png", "NFC.xml")]
+		[DataRow("Passport01", "Claims.json", "PassportPhotoSkewed.png", "NFC.xml")]
+		[DataRow("Passport01", "Claims.json", "PassportPhotoFlipped.png", "NFC.xml")]
+		[DataRow("Passport01", "Claims.json", "PassportPhotoBlur.png", "NFC.xml")]
+		public async Task Test_03_Invalidate(string Folder, string ClaimsFile, string PhotoFile, string NfcFile)
+		{
+			KeyValuePair<string, object>[] Claims = await LoadClaims(Folder, ClaimsFile);
+			PersonalInformation PI = Create(Claims);
+
+			IdentityApplication Application = new(
+				Guid.NewGuid().ToString() + "@example.org",
+				"urn:nf:iot:leg:id:1.0", true, PI,
+				await LoadClaims(Folder, ClaimsFile),
+				[
+					await LoadProfilePhoto(Folder, PhotoFile)
+				],
+				[
+					LoadDocument(Folder, NfcFile)
+				],
+				new InternalTestAccount());
+
+			Assert.IsTrue(module!.Supports(Application) > Grade.NotAtAll);
+
+			double? Distance = await module.ValidateDistance(Application);
+
+			if (!Application.HasErrors)
+			{
+				Console.Out.WriteLine(Distance?.ToString() ?? "Distance not available");
+
+				Assert.AreEqual(0, Application.ValidatedClaims.Length, "Application has validated claims.");
+				Assert.AreEqual(1, Application.InvalidatedPhotos.Length, "Application has not invalidated photos.");
+				Assert.IsFalse(Application.HasValidatedClaims, "Application has validated claims.");
+				Assert.IsFalse(Application.HasValidatedPhotos, "Application has validated photos.");
+				Assert.IsFalse(Application.IsValid, "Application is valid.");
+			}
 		}
 
 		private static string GetPath(string Folder, string FileName)
@@ -134,12 +179,13 @@ namespace TAG.Identity.TravelDocuments.Test
 			return [.. Result];
 		}
 
-		private static async Task<Photo> LoadPhoto(string Folder, string FileName)
+		private static async Task<Photo> LoadProfilePhoto(string Folder, string FileName)
 		{
 			string ContentType = InternetContent.GetContentType(Path.GetExtension(FileName));
 			byte[] Binary = await File.ReadAllBytesAsync(GetPath(Folder, FileName));
+			string ProfilePhotoName = "ProfilePhoto" + Path.GetExtension(FileName);
 
-			return new Photo(ContentType, FileName, Binary);
+			return new Photo(ContentType, ProfilePhotoName, Binary);
 		}
 
 		private static XmlDocument LoadDocument(string Folder, string FileName)

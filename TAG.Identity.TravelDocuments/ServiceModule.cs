@@ -183,7 +183,16 @@ namespace TAG.Identity.TravelDocuments
 		/// Validates an identity application.
 		/// </summary>
 		/// <param name="Application">Identity application.</param>
-		public async Task Validate(IIdentityApplication Application)
+		public Task Validate(IIdentityApplication Application)
+		{
+			return this.ValidateDistance(Application);
+		}
+
+		/// <summary>
+		/// Validates an identity application.
+		/// </summary>
+		/// <param name="Application">Identity application.</param>
+		public async Task<double?> ValidateDistance(IIdentityApplication Application)
 		{
 			SKBitmap TravelDocumentFaceBitmap = null;
 
@@ -191,11 +200,11 @@ namespace TAG.Identity.TravelDocuments
 			{
 				string PreviewId = GetPreviewId(Application);
 				if (string.IsNullOrEmpty(PreviewId))
-					return;
+					return null;
 
 				IPhoto ProfilePhoto = GetProfilePhoto(Application);
 				if (ProfilePhoto is null)
-					return;
+					return null;
 
 				KeyValuePair<XmlDocument, DocumentInformation> P = GetNfcDocument(Application);
 				XmlDocument Nfc = P.Key;
@@ -204,7 +213,7 @@ namespace TAG.Identity.TravelDocuments
 				AdditionalPersonalDetails AdditionalDetails = null;
 
 				if (Nfc is null || DocInfo is null)
-					return;
+					return null;
 
 				// Validate NFC replay document.
 
@@ -218,7 +227,7 @@ namespace TAG.Identity.TravelDocuments
 					if (AuthResult != AuthenticateResult.Success)
 					{
 						FailAll(Application, "Unable to authenticate NFC document: " + AuthResult.ToString());
-						return;
+						return null;
 					}
 
 					DocumentInformation DocInfo2 = null;
@@ -249,26 +258,26 @@ namespace TAG.Identity.TravelDocuments
 					if (Result != ReadTravelDocumentResult.Success)
 					{
 						FailAll(Application, "Unable to read embedded Travel Document: " + Result.ToString());
-						return;
+						return null;
 					}
 
 					if (DocInfo is null)
 					{
 						FailAll(Application, "MRZ not available in embedded Travel Document.");
-						return;
+						return null;
 					}
 
 					if (DocInfo.MRZ_Information.Replace("\n", string.Empty).Replace("\r", string.Empty) !=
 						DocInfo2.MRZ_Information.Replace("\n", string.Empty).Replace("\r", string.Empty))
 					{
 						FailAll(Application, "MRZ provided in authentication not same as MRZ encoded in Travel Document.");
-						return;
+						return null;
 					}
 
 					if (TravelDocumentFace is null)
 					{
 						FailAll(Application, "Face not available in embedded Travel Document.");
-						return;
+						return null;
 					}
 
 					InterleavedImage TravelDocumentImage = J2kImage.FromBytes(TravelDocumentFace.ImageData);
@@ -280,8 +289,83 @@ namespace TAG.Identity.TravelDocuments
 
 					Log.Exception(ex);
 					FailAll(Application, ex.Message);
-					return;
+					return null;
 				}
+
+				// Validate Profile Photo (only check personal information, if photos match, but are not the same)
+
+				string DeepFaceUrl = await RuntimeSettings.GetAsync(typeof(ServiceModule).Namespace + ".DeepFaceUrl",
+					"http://localhost:5000/");
+
+				using DeepFaceClient DeepFace = new(DeepFaceUrl);
+				using SKImage TravelDocumentFaceImage = SKImage.FromBitmap(TravelDocumentFaceBitmap);
+
+				FaceRepresentation[] TravelDocumentRepresentations = await DeepFace.Represent(TravelDocumentFaceImage);
+
+				if (TravelDocumentRepresentations.Length == 0)
+				{
+					FailAll(Application, "No face detected in NFC document.");
+					return null;
+				}
+				else if (TravelDocumentRepresentations.Length > 1)
+				{
+					FailAll(Application, "More than one face detected in NFC document.");
+					return null;
+				}
+				else if (TravelDocumentRepresentations[0].FaceConfidence < .95)
+				{
+					FailAll(Application, "Photo in Travel Document too low quality.");
+					return null;
+				}
+
+				FaceRepresentation[] ProfilePhotoRepresentations = await DeepFace.Represent(
+					ProfilePhoto.Binary, ProfilePhoto.ContentType);
+
+				if (ProfilePhotoRepresentations.Length == 0)
+				{
+					Application.PhotoInvalid(ProfilePhoto, "No face detected in profile photo.", "en",
+						"NoFace", this);
+					return null;
+				}
+				else if (ProfilePhotoRepresentations.Length > 1)
+				{
+					Application.PhotoInvalid(ProfilePhoto, "Multiple faces detected in profile photo.", "en",
+						"MultipleFaces", this);
+					return null;
+				}
+				else if (ProfilePhotoRepresentations[0].FaceConfidence < .95)
+				{
+					Application.PhotoInvalid(ProfilePhoto, "Low quality profile photo.", "en",
+						"LowQualityPhoto", this);
+					return null;
+				}
+
+				double Distance = ComputeNormalizedEuclideanDistance(
+					TravelDocumentRepresentations[0].Embedding,
+					ProfilePhotoRepresentations[0].Embedding);
+
+				using SKData Data = TravelDocumentFaceImage.Encode(SKEncodedImageFormat.Png, 0);
+
+				if (Distance > 1.04)    // Facenet512, with Euclidean L2 Norm, typical threshold.
+				{
+					Application.PhotoInvalid(ProfilePhoto, "Profile photo does not match photo in Travel Document.", "en",
+						"PhotoMismatch", this);
+					return Distance;
+				}
+				else if (Distance < 0.15)
+				{
+					Application.PhotoInvalid(ProfilePhoto, "Profile photo too similar to passport photo.", "en",
+						"PhotoTooSimilar", this);
+					return Distance;
+				}
+				else if (Distance < 0.4)
+				{
+					Application.ReportError("Profile photo too similar to passport photo.", "en",
+						"PhotoTooSimilar", ValidationErrorType.Client, this);
+					return Distance;
+				}
+
+				Application.PhotoValid(ProfilePhoto, this);
 
 				// Validate Personal Information claims
 
@@ -554,73 +638,12 @@ namespace TAG.Identity.TravelDocuments
 					}
 				}
 
-				// Validate Profile Photo
-
-				string DeepFaceUrl = await RuntimeSettings.GetAsync(typeof(ServiceModule).Namespace + ".DeepFaceUrl",
-					"http://localhost:5000/");
-
-				using DeepFaceClient DeepFace = new(DeepFaceUrl);
-				using SKImage TravelDocumentFaceImage = SKImage.FromBitmap(TravelDocumentFaceBitmap);
-
-				FaceRepresentation[] TravelDocumentRepresentations = await DeepFace.Represent(TravelDocumentFaceImage);
-
-				if (TravelDocumentRepresentations.Length == 0)
-				{
-					FailAll(Application, "No face detected in NFC document.");
-					return;
-				}
-				else if (TravelDocumentRepresentations.Length > 1)
-				{
-					FailAll(Application, "More than one face detected in NFC document.");
-					return;
-				}
-				else if (TravelDocumentRepresentations[0].FaceConfidence < .95)
-				{
-					FailAll(Application, "Photo in Travel Document too low quality.");
-					return;
-				}
-
-				FaceRepresentation[] ProfilePhotoRepresentations = await DeepFace.Represent(
-					ProfilePhoto.Binary, ProfilePhoto.ContentType);
-
-				if (ProfilePhotoRepresentations.Length == 0)
-				{
-					Application.PhotoInvalid(ProfilePhoto, "No face detected in profile photo.", "en",
-						"NoFace", this);
-				}
-				else if (ProfilePhotoRepresentations.Length > 1)
-				{
-					Application.PhotoInvalid(ProfilePhoto, "Multiple faces detected in profile photo.", "en",
-						"MultipleFaces", this);
-				}
-				else if (ProfilePhotoRepresentations[0].FaceConfidence < .95)
-				{
-					Application.PhotoInvalid(ProfilePhoto, "Low quality profile photo.", "en",
-						"LowQualityPhoto", this);
-				}
-				else
-				{
-					double Distance = ComputeNormalizedEuclideanDistance(
-						TravelDocumentRepresentations[0].Embedding,
-						ProfilePhotoRepresentations[0].Embedding);
-
-					using SKData Data = TravelDocumentFaceImage.Encode(SKEncodedImageFormat.Png, 0);
-
-					VerificationResult Result = await DeepFace.Verify(DistanceMetric.EuclideanL2, Data.ToArray(),
-						"image/png", ProfilePhoto.Binary, ProfilePhoto.ContentType);
-
-					if (Distance > 1.04)	// Facenet512, with Euclidean L2 Norm, typical threshold.
-					{
-						Application.PhotoInvalid(ProfilePhoto, "Profile photo does not match photo in Travel Document.", "en",
-							"PhotoMismatch", this);
-					}
-					else
-						Application.PhotoValid(ProfilePhoto, this);
-				}
+				return Distance;
 			}
 			catch (Exception ex)
 			{
 				Application.ReportError(ex.Message, null, null, ValidationErrorType.Service, this);
+				return null;
 			}
 			finally
 			{

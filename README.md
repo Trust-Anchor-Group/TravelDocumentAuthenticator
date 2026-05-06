@@ -43,6 +43,7 @@ invalidates claims. The following table lists the error codes using by the servi
 | `MultipleFaces`          | `Multiple faces detected in profile photo.`              | Multiple faces were detected in the profile photo provided. |
 | `LowQualityPhoto`        | `Low quality profile photo.`                             | The confidence level in the face provided in the profile photo is too low. |
 | `PhotoMismatch`          | `Profile photo does not match photo in Travel Document.` | The face provided in the profile photo does not match the face in the travel document. |
+| `PhotoTooSimilar`        | N/A                                                      | The face provided in the profile photo is too similar to the face in the travel document, indicating a potential spoofing attempt. Retaking profile photo is recommended. If application was rejected, images were too similar. If application was left for manual review, it indicates images were very similar but not identical. |
 
 ### TODO
 
