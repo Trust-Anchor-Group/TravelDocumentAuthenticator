@@ -60,13 +60,15 @@ namespace TAG.Networking.DeepFace
 		private readonly Uri endpoint;
 		private readonly Uri endpointRepresent;
 		private readonly Uri endpointVerify;
+		private readonly bool antiSpoofing;
 
 		/// <summary>
 		/// DeepFace client.
 		/// </summary>
 		/// <param name="Endpoint">Endpoint URI of the DeepFace service.</param>
-		public DeepFaceClient(string Endpoint, params ISniffer[] Sniffers)
-			: this(new Uri(Endpoint, UriKind.Absolute), Sniffers)
+		/// <param name="AntiSpoofing">If anti-spoofing should be enabled.</param>
+		public DeepFaceClient(string Endpoint, bool AntiSpoofing, params ISniffer[] Sniffers)
+			: this(new Uri(Endpoint, UriKind.Absolute), AntiSpoofing, Sniffers)
 		{
 		}
 
@@ -74,12 +76,14 @@ namespace TAG.Networking.DeepFace
 		/// DeepFace client.
 		/// </summary>
 		/// <param name="Endpoint">Endpoint URI of the DeepFace service.</param>
-		public DeepFaceClient(Uri Endpoint, params ISniffer[] Sniffers)
+		/// <param name="AntiSpoofing">If anti-spoofing should be enabled.</param>
+		public DeepFaceClient(Uri Endpoint, bool AntiSpoofing, params ISniffer[] Sniffers)
 			: base(true, Sniffers)
 		{
 			this.endpoint = Endpoint;
 			this.endpointRepresent = new Uri(this.endpoint, "/represent");
 			this.endpointVerify = new Uri(this.endpoint, "/verify");
+			this.antiSpoofing = AntiSpoofing;
 		}
 
 		/// <summary>
@@ -162,13 +166,17 @@ namespace TAG.Networking.DeepFace
 		public async Task<FaceRepresentation[]> Represent(FaceRecognitionModel Model,
 			DetectorBackend DetectorBackend, byte[] Image, string ImageContentType)
 		{
-			object Response = await this.Request(this.endpointRepresent,
-				new Dictionary<string, object>()
-				{
-					{ "model_name", modelNames[(int)Model] },
-					{ "detector_backend", detectorBackends[(int)DetectorBackend] },
-					{ "img", "data:" + ImageContentType+ ";base64," + Convert.ToBase64String(Image) }
-				});
+			Dictionary<string, object> Request = new()
+			{
+				{ "model_name", modelNames[(int)Model] },
+				{ "detector_backend", detectorBackends[(int)DetectorBackend] },
+				{ "img", "data:" + ImageContentType+ ";base64," + Convert.ToBase64String(Image) }
+			};
+
+			if (this.antiSpoofing)
+				Request["anti_spoofing"] = true;
+
+			object Response = await this.Request(this.endpointRepresent, Request);
 
 			if (Response is not Dictionary<string, object> ResponseObj ||
 				!ResponseObj.TryGetValue("results", out object? Obj) ||
@@ -346,7 +354,7 @@ namespace TAG.Networking.DeepFace
 		{
 			using SKData Data1 = Image1.Encode(SKEncodedImageFormat.Png, 0);
 			using SKData Data2 = Image2.Encode(SKEncodedImageFormat.Png, 0);
-			return this.Verify(Model, DetectorBackend, 
+			return this.Verify(Model, DetectorBackend,
 				Data1.ToArray(), ImageCodec.ContentTypePng,
 				Data2.ToArray(), ImageCodec.ContentTypePng);
 		}
@@ -360,7 +368,7 @@ namespace TAG.Networking.DeepFace
 		public Task<VerificationResult> Verify(byte[] Image1, string Image1ContentType,
 			byte[] Image2, string Image2ContentType)
 		{
-			return this.Verify(FaceRecognitionModel.Facenet512, 
+			return this.Verify(FaceRecognitionModel.Facenet512,
 				Image1, Image1ContentType, Image2, Image2ContentType);
 		}
 
@@ -375,7 +383,7 @@ namespace TAG.Networking.DeepFace
 			byte[] Image1, string Image1ContentType,
 			byte[] Image2, string Image2ContentType)
 		{
-			return this.Verify(Model, DetectorBackend.RetinaFace, 
+			return this.Verify(Model, DetectorBackend.RetinaFace,
 				Image1, Image1ContentType, Image2, Image2ContentType);
 		}
 
@@ -391,10 +399,10 @@ namespace TAG.Networking.DeepFace
 			DetectorBackend DetectorBackend, byte[] Image1, string Image1ContentType,
 			byte[] Image2, string Image2ContentType)
 		{
-			return this.Verify(Model,DetectorBackend, DistanceMetric.EuclideanL2,
+			return this.Verify(Model, DetectorBackend, DistanceMetric.EuclideanL2,
 				Image1, Image1ContentType, Image2, Image2ContentType);
 		}
-		
+
 		/// <summary>
 		/// Verifies the likeness of two faces in different images.
 		/// </summary>
@@ -486,18 +494,22 @@ namespace TAG.Networking.DeepFace
 			byte[] Image1, string Image1ContentType,
 			byte[] Image2, string Image2ContentType)
 		{
-			object Response = await this.Request(this.endpointVerify,
-				new Dictionary<string, object>()
-				{
-					{ "model_name", modelNames[(int)Model] },
-					{ "detector_backend", detectorBackends[(int)DetectorBackend] },
-					{ "distance_metric", distanceMetrics[(int)DistanceMetric] },
-					{ "img1", "data:" + Image1ContentType+ ";base64," + Convert.ToBase64String(Image1) },
-					{ "img2", "data:" + Image2ContentType+ ";base64," + Convert.ToBase64String(Image2) }
-				});
+			Dictionary<string, object> Request = new()
+			{
+				{ "model_name", modelNames[(int)Model] },
+				{ "detector_backend", detectorBackends[(int)DetectorBackend] },
+				{ "distance_metric", distanceMetrics[(int)DistanceMetric] },
+				{ "img1", "data:" + Image1ContentType+ ";base64," + Convert.ToBase64String(Image1) },
+				{ "img2", "data:" + Image2ContentType+ ";base64," + Convert.ToBase64String(Image2) }
+			};
+
+			if (this.antiSpoofing)
+				Request["anti_spoofing"] = true;
+
+			object Response = await this.Request(this.endpointVerify, Request);
 
 			if (Response is not Dictionary<string, object> ResponseObj ||
-				!ResponseObj.TryGetValue("confidence", out object? Obj) || 
+				!ResponseObj.TryGetValue("confidence", out object? Obj) ||
 				!IsDouble(Obj, out double Confidence) ||
 				!ResponseObj.TryGetValue("distance", out Obj) ||
 				!IsDouble(Obj, out double Distance) ||

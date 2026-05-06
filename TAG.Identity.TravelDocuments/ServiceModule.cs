@@ -50,12 +50,12 @@ namespace TAG.Identity.TravelDocuments
 		/// <summary>
 		/// Sniffable object that can be sniffed on dynamically.
 		/// </summary>
-		private static readonly CommunicationLayer observable = new CommunicationLayer(false);
+		private static readonly CommunicationLayer observable = new(false);
 
 		/// <summary>
 		/// Sniffer proxy, forwarding sniffer events to <see cref="observable"/>.
 		/// </summary>
-		private static readonly SnifferProxy snifferProxy = new SnifferProxy(observable);
+		private static readonly SnifferProxy snifferProxy = new(observable);
 
 		/// <summary>
 		/// Users are required to have this privilege in order to access this service via the Admin interface.
@@ -96,7 +96,7 @@ namespace TAG.Identity.TravelDocuments
 		{
 			running = false;
 
-			if (!(xmlFileSniffer is null))
+			if (xmlFileSniffer is not null)
 			{
 				await xmlFileSniffer.DisposeAsync();
 				xmlFileSniffer = null;
@@ -333,10 +333,10 @@ namespace TAG.Identity.TravelDocuments
 
 				// Validate Profile Photo (only check personal information, if photos match, but are not the same)
 
-				string DeepFaceUrl = await RuntimeSettings.GetAsync(typeof(ServiceModule).Namespace + ".DeepFaceUrl",
-					"http://localhost:5000/");
+				string DeepFaceUrl = await RuntimeSettings.GetAsync(typeof(ServiceModule).Namespace + ".DeepFaceUrl", "http://localhost:5000/");
+				bool AntiSpoofing = await RuntimeSettings.GetAsync(typeof(ServiceModule).Namespace + ".AntiSpoofing", true);
 
-				using DeepFaceClient DeepFace = new(DeepFaceUrl, Sniffers);
+				using DeepFaceClient DeepFace = new(DeepFaceUrl, AntiSpoofing, Sniffers);
 				double Distance;
 
 				try
@@ -792,7 +792,7 @@ namespace TAG.Identity.TravelDocuments
 			Application.InvalidateAllClaims(Message, "en", "NfcInvalid");
 			Application.InvalidateAllPhotos(Message, "en", "NfcInvalid");
 		}
-		
+
 		/// <summary>
 		/// Registers a web sniffer on the ShuftiPro client.
 		/// </summary>
