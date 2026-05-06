@@ -6,11 +6,15 @@
 	</PropertyGroup>
 
   <ItemGroup>
+    <None Remove="Root\TravelDocuments\Sniffer.md" />
     <None Remove="TAG.Identity.TravelDocuments.manifest" />
   </ItemGroup>
 
   <ItemGroup>
     <Content Include="Root\TravelDocuments\Settings.md">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Root\TravelDocuments\Sniffer.md">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <Content Include="TAG.Identity.TravelDocuments.manifest">

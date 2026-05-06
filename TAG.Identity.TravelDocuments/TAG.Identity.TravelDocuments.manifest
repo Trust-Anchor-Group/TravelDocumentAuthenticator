@@ -8,6 +8,7 @@
 	<Folder name="Root">
 		<Folder name="TravelDocuments">
 			<Content fileName="Settings.md"/>
+			<Content fileName="Sniffer.md"/>
 		</Folder>
 	</Folder>
 </Module>

@@ -18,6 +18,9 @@ using TAG.Networking.DeepFace;
 using Waher.Content;
 using Waher.Events;
 using Waher.IoTGateway;
+using Waher.Networking;
+using Waher.Networking.HTTP;
+using Waher.Networking.Sniffers;
 using Waher.Persistence;
 using Waher.Runtime.Inventory;
 using Waher.Runtime.Settings;
@@ -38,6 +41,21 @@ namespace TAG.Identity.TravelDocuments
 	public class ServiceModule : IConfigurableModule, IIdentityAuthenticatorService
 	{
 		private static bool running = false;
+
+		/// <summary>
+		/// Reference to client sniffer for Stripe communication.
+		/// </summary>
+		private static XmlFileSniffer xmlFileSniffer = null;
+
+		/// <summary>
+		/// Sniffable object that can be sniffed on dynamically.
+		/// </summary>
+		private static readonly CommunicationLayer observable = new CommunicationLayer(false);
+
+		/// <summary>
+		/// Sniffer proxy, forwarding sniffer events to <see cref="observable"/>.
+		/// </summary>
+		private static readonly SnifferProxy snifferProxy = new SnifferProxy(observable);
 
 		/// <summary>
 		/// Users are required to have this privilege in order to access this service via the Admin interface.
@@ -74,10 +92,15 @@ namespace TAG.Identity.TravelDocuments
 		/// <summary>
 		/// Method called when service is terminated and stopped.
 		/// </summary>
-		public Task Stop()
+		public async Task Stop()
 		{
 			running = false;
-			return Task.CompletedTask;
+
+			if (!(xmlFileSniffer is null))
+			{
+				await xmlFileSniffer.DisposeAsync();
+				xmlFileSniffer = null;
+			}
 		}
 
 		#endregion
@@ -192,7 +215,23 @@ namespace TAG.Identity.TravelDocuments
 		/// Validates an identity application.
 		/// </summary>
 		/// <param name="Application">Identity application.</param>
-		public async Task<double?> ValidateDistance(IIdentityApplication Application)
+		public Task<double?> ValidateDistance(IIdentityApplication Application)
+		{
+			xmlFileSniffer ??= new XmlFileSniffer(Gateway.AppDataFolder + "DeepFace" + Path.DirectorySeparatorChar +
+				"Log %YEAR%-%MONTH%-%DAY%T%HOUR%.xml",
+				Gateway.AppDataFolder + "Transforms" + Path.DirectorySeparatorChar + "SnifferXmlToHtml.xslt",
+				7, BinaryPresentationMethod.Base64);
+
+			return this.ValidateDistance(Application, xmlFileSniffer, snifferProxy);
+		}
+
+		/// <summary>
+		/// Validates an identity application.
+		/// </summary>
+		/// <param name="Application">Identity application.</param>
+		/// <param name="Sniffers">Optional sniffers.</param>
+		public async Task<double?> ValidateDistance(IIdentityApplication Application,
+			params ISniffer[] Sniffers)
 		{
 			SKBitmap TravelDocumentFaceBitmap = null;
 
@@ -297,75 +336,86 @@ namespace TAG.Identity.TravelDocuments
 				string DeepFaceUrl = await RuntimeSettings.GetAsync(typeof(ServiceModule).Namespace + ".DeepFaceUrl",
 					"http://localhost:5000/");
 
-				using DeepFaceClient DeepFace = new(DeepFaceUrl);
-				using SKImage TravelDocumentFaceImage = SKImage.FromBitmap(TravelDocumentFaceBitmap);
+				using DeepFaceClient DeepFace = new(DeepFaceUrl, Sniffers);
+				double Distance;
 
-				FaceRepresentation[] TravelDocumentRepresentations = await DeepFace.Represent(TravelDocumentFaceImage);
+				try
+				{
+					using SKImage TravelDocumentFaceImage = SKImage.FromBitmap(TravelDocumentFaceBitmap);
 
-				if (TravelDocumentRepresentations.Length == 0)
-				{
-					FailAll(Application, "No face detected in NFC document.");
-					return null;
+					FaceRepresentation[] TravelDocumentRepresentations = await DeepFace.Represent(TravelDocumentFaceImage);
+
+					if (TravelDocumentRepresentations.Length == 0)
+					{
+						FailAll(Application, "No face detected in NFC document.");
+						return null;
+					}
+					else if (TravelDocumentRepresentations.Length > 1)
+					{
+						FailAll(Application, "More than one face detected in NFC document.");
+						return null;
+					}
+					else if (TravelDocumentRepresentations[0].FaceConfidence < .95)
+					{
+						FailAll(Application, "Photo in Travel Document too low quality.");
+						return null;
+					}
+
+					FaceRepresentation[] ProfilePhotoRepresentations = await DeepFace.Represent(
+						ProfilePhoto.Binary, ProfilePhoto.ContentType);
+
+					if (ProfilePhotoRepresentations.Length == 0)
+					{
+						Application.PhotoInvalid(ProfilePhoto, "No face detected in profile photo.", "en",
+							"NoFace", this);
+						return null;
+					}
+					else if (ProfilePhotoRepresentations.Length > 1)
+					{
+						Application.PhotoInvalid(ProfilePhoto, "Multiple faces detected in profile photo.", "en",
+							"MultipleFaces", this);
+						return null;
+					}
+					else if (ProfilePhotoRepresentations[0].FaceConfidence < .95)
+					{
+						Application.PhotoInvalid(ProfilePhoto, "Low quality profile photo.", "en",
+							"LowQualityPhoto", this);
+						return null;
+					}
+
+					Distance = ComputeNormalizedEuclideanDistance(
+						TravelDocumentRepresentations[0].Embedding,
+						ProfilePhotoRepresentations[0].Embedding);
+
+					using SKData Data = TravelDocumentFaceImage.Encode(SKEncodedImageFormat.Png, 0);
+
+					if (Distance > 1.04)    // Facenet512, with Euclidean L2 Norm, typical threshold.
+					{
+						Application.PhotoInvalid(ProfilePhoto, "Profile photo does not match photo in Travel Document.", "en",
+							"PhotoMismatch", this);
+						return Distance;
+					}
+					else if (Distance < 0.15)
+					{
+						Application.PhotoInvalid(ProfilePhoto, "Profile photo too similar to passport photo.", "en",
+							"PhotoTooSimilar", this);
+						return Distance;
+					}
+					else if (Distance < 0.4)
+					{
+						Application.ReportError("Profile photo too similar to passport photo.", "en",
+							"PhotoTooSimilar", ValidationErrorType.Client, this);
+						return Distance;
+					}
+
+					Application.PhotoValid(ProfilePhoto, this);
 				}
-				else if (TravelDocumentRepresentations.Length > 1)
+				finally
 				{
-					FailAll(Application, "More than one face detected in NFC document.");
-					return null;
-				}
-				else if (TravelDocumentRepresentations[0].FaceConfidence < .95)
-				{
-					FailAll(Application, "Photo in Travel Document too low quality.");
-					return null;
+					foreach (ISniffer Sniffer in Sniffers)
+						DeepFace.Remove(Sniffer);
 				}
 
-				FaceRepresentation[] ProfilePhotoRepresentations = await DeepFace.Represent(
-					ProfilePhoto.Binary, ProfilePhoto.ContentType);
-
-				if (ProfilePhotoRepresentations.Length == 0)
-				{
-					Application.PhotoInvalid(ProfilePhoto, "No face detected in profile photo.", "en",
-						"NoFace", this);
-					return null;
-				}
-				else if (ProfilePhotoRepresentations.Length > 1)
-				{
-					Application.PhotoInvalid(ProfilePhoto, "Multiple faces detected in profile photo.", "en",
-						"MultipleFaces", this);
-					return null;
-				}
-				else if (ProfilePhotoRepresentations[0].FaceConfidence < .95)
-				{
-					Application.PhotoInvalid(ProfilePhoto, "Low quality profile photo.", "en",
-						"LowQualityPhoto", this);
-					return null;
-				}
-
-				double Distance = ComputeNormalizedEuclideanDistance(
-					TravelDocumentRepresentations[0].Embedding,
-					ProfilePhotoRepresentations[0].Embedding);
-
-				using SKData Data = TravelDocumentFaceImage.Encode(SKEncodedImageFormat.Png, 0);
-
-				if (Distance > 1.04)    // Facenet512, with Euclidean L2 Norm, typical threshold.
-				{
-					Application.PhotoInvalid(ProfilePhoto, "Profile photo does not match photo in Travel Document.", "en",
-						"PhotoMismatch", this);
-					return Distance;
-				}
-				else if (Distance < 0.15)
-				{
-					Application.PhotoInvalid(ProfilePhoto, "Profile photo too similar to passport photo.", "en",
-						"PhotoTooSimilar", this);
-					return Distance;
-				}
-				else if (Distance < 0.4)
-				{
-					Application.ReportError("Profile photo too similar to passport photo.", "en",
-						"PhotoTooSimilar", ValidationErrorType.Client, this);
-					return Distance;
-				}
-
-				Application.PhotoValid(ProfilePhoto, this);
 
 				// Validate Personal Information claims
 
@@ -741,6 +791,20 @@ namespace TAG.Identity.TravelDocuments
 		{
 			Application.InvalidateAllClaims(Message, "en", "NfcInvalid");
 			Application.InvalidateAllPhotos(Message, "en", "NfcInvalid");
+		}
+		
+		/// <summary>
+		/// Registers a web sniffer on the ShuftiPro client.
+		/// </summary>
+		/// <param name="SnifferId">Sniffer ID</param>
+		/// <param name="Request">HTTP Request for sniffer page.</param>
+		/// <param name="UserVariable">Name of user variable.</param>
+		/// <param name="Privileges">Privileges required to view content.</param>
+		/// <returns>Code to embed into page.</returns>
+		public static string RegisterSniffer(string SnifferId, HttpRequest Request,
+			string UserVariable, params string[] Privileges)
+		{
+			return Gateway.AddWebSniffer(SnifferId, Request, observable, UserVariable, Privileges);
 		}
 
 		#endregion
