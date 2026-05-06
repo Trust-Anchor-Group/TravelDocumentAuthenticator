@@ -22,8 +22,10 @@ using Waher.Networking;
 using Waher.Networking.HTTP;
 using Waher.Networking.Sniffers;
 using Waher.Persistence;
+using Waher.Runtime.HashStore;
 using Waher.Runtime.Inventory;
 using Waher.Runtime.Settings;
+using Waher.Security;
 
 namespace TAG.Identity.TravelDocuments
 {
@@ -424,6 +426,95 @@ namespace TAG.Identity.TravelDocuments
 
 				PersonalInformation PersonalInfo = PersonalInformation.Create(Application.Claims);
 
+				bool EnforceUniqueness = await RuntimeSettings.GetAsync(typeof(ServiceModule).Namespace + ".EnforceUniqueness", false);
+				byte[] Hash = null;
+
+				if (EnforceUniqueness)
+				{
+					bool IncludeDocumentNumber = await RuntimeSettings.GetAsync(typeof(ServiceModule).Namespace + ".IncludeDocumentNumber", true);
+					bool IncludeCountry = await RuntimeSettings.GetAsync(typeof(ServiceModule).Namespace + ".IncludeCountry", true);
+					bool IncludeBirthDate = await RuntimeSettings.GetAsync(typeof(ServiceModule).Namespace + ".IncludeBirthDate", true);
+					bool IncludePrimaryIdentifier = await RuntimeSettings.GetAsync(typeof(ServiceModule).Namespace + ".IncludePrimaryIdentifier", true);
+					bool IncludeSecondaryIdentifier = await RuntimeSettings.GetAsync(typeof(ServiceModule).Namespace + ".IncludeSecondaryIdentifier", true);
+					bool IncludeOptionalData = await RuntimeSettings.GetAsync(typeof(ServiceModule).Namespace + ".IncludeOptionalData", false);
+					bool IncludeApplicationYear = await RuntimeSettings.GetAsync(typeof(ServiceModule).Namespace + ".IncludeApplicationYear", false);
+					bool IncludeApplicationMonth = await RuntimeSettings.GetAsync(typeof(ServiceModule).Namespace + ".IncludeApplicationMonth", false);
+					bool IncludeApplicationDay = await RuntimeSettings.GetAsync(typeof(ServiceModule).Namespace + ".IncludeApplicationDay", false);
+					string Salt = await RuntimeSettings.GetAsync(typeof(ServiceModule).Namespace + ".Salt", string.Empty);
+					StringBuilder sb = new();
+					DateTime ApplicationTime = DateTime.Today;
+
+					sb.Append(Salt);
+
+					if (IncludeDocumentNumber)
+					{
+						sb.Append('|');
+						sb.Append(DocInfo.DocumentNumber ?? string.Empty);
+					}
+
+					if (IncludeCountry)
+					{
+						sb.Append('|');
+						sb.Append(DocInfo.IssuingState ?? string.Empty);
+					}
+
+					if (IncludeBirthDate)
+					{
+						sb.Append('|');
+						sb.Append(DocInfo.DateOfBirth ?? string.Empty);
+					}
+
+					if (IncludePrimaryIdentifier)
+					{
+						foreach (string Name in DocInfo.PrimaryIdentifier ?? [])
+						{
+							sb.Append('|');
+							sb.Append(Name);
+						}
+					}
+
+					if (IncludeSecondaryIdentifier)
+					{
+						foreach (string Name in DocInfo.SecondaryIdentifier ?? [])
+						{
+							sb.Append('|');
+							sb.Append(Name);
+						}
+					}
+
+					if (IncludeOptionalData)
+					{
+						sb.Append('|');
+						sb.Append(DocInfo.OptionalData ?? string.Empty);
+					}
+
+					if (IncludeApplicationYear)
+					{
+						sb.Append('|');
+						sb.Append(ApplicationTime.Year.ToString("D4"));
+					}
+
+					if (IncludeApplicationMonth)
+					{
+						sb.Append('|');
+						sb.Append(ApplicationTime.Month.ToString("D2"));
+					}
+
+					if (IncludeApplicationDay)
+					{
+						sb.Append('|');
+						sb.Append(ApplicationTime.Day.ToString("D2"));
+					}
+
+					Hash = Hashes.ComputeSHA256Hash(Encoding.UTF8.GetBytes(sb.ToString()));
+
+					if (await PersistedHashes.VerifyHash(Hash))
+					{
+						FailAll(Application, "An application with the same personal information has already been accepted.", "en", "DuplicateApplication");
+						return Distance;
+					}
+				}
+
 				DateTime? BirthDate = PersonalInfo.BirthDate;
 				if (BirthDate.HasValue)
 				{
@@ -691,6 +782,13 @@ namespace TAG.Identity.TravelDocuments
 					}
 				}
 
+				if (Hash is not null &&
+					Application.IsValid.HasValue && 
+					Application.IsValid.Value)
+				{
+					await PersistedHashes.AddHash(Hash);
+				}
+
 				return Distance;
 			}
 			catch (Exception ex)
@@ -792,8 +890,14 @@ namespace TAG.Identity.TravelDocuments
 
 		private static void FailAll(IIdentityApplication Application, string Message)
 		{
-			Application.InvalidateAllClaims(Message, "en", "NfcInvalid");
-			Application.InvalidateAllPhotos(Message, "en", "NfcInvalid");
+			FailAll(Application, Message, "en", "NfcInvalid");
+		}
+
+		private static void FailAll(IIdentityApplication Application, string Message,
+			string Language, string Code)
+		{
+			Application.InvalidateAllClaims(Message, Language, Code);
+			Application.InvalidateAllPhotos(Message, Language, Code);
 		}
 
 		/// <summary>
