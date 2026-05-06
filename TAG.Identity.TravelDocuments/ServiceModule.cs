@@ -335,6 +335,9 @@ namespace TAG.Identity.TravelDocuments
 
 				string DeepFaceUrl = await RuntimeSettings.GetAsync(typeof(ServiceModule).Namespace + ".DeepFaceUrl", "http://localhost:5000/");
 				bool AntiSpoofing = await RuntimeSettings.GetAsync(typeof(ServiceModule).Namespace + ".AntiSpoofing", true);
+				double MaxDistance = await RuntimeSettings.GetAsync(typeof(ServiceModule).Namespace + ".MaxDistance", 1.04);    // Facenet512, with Euclidean L2 Norm, typical threshold.
+				double MinDistance = await RuntimeSettings.GetAsync(typeof(ServiceModule).Namespace + ".MinDistance", 0.15);    // Empirical value to avoid clients using an edited passport photo as profile picture.
+				double ManualDistance = await RuntimeSettings.GetAsync(typeof(ServiceModule).Namespace + ".ManualDistance", 0.40);    // Empirical value that leads to manual approval if above Minimum distance, and belwot his threshold.
 
 				using DeepFaceClient DeepFace = new(DeepFaceUrl, AntiSpoofing, Sniffers);
 				double Distance;
@@ -389,19 +392,19 @@ namespace TAG.Identity.TravelDocuments
 
 					using SKData Data = TravelDocumentFaceImage.Encode(SKEncodedImageFormat.Png, 0);
 
-					if (Distance > 1.04)    // Facenet512, with Euclidean L2 Norm, typical threshold.
+					if (Distance > MaxDistance)
 					{
 						Application.PhotoInvalid(ProfilePhoto, "Profile photo does not match photo in Travel Document.", "en",
 							"PhotoMismatch", this);
 						return Distance;
 					}
-					else if (Distance < 0.15)
+					else if (Distance < MinDistance)
 					{
 						Application.PhotoInvalid(ProfilePhoto, "Profile photo too similar to passport photo.", "en",
 							"PhotoTooSimilar", this);
 						return Distance;
 					}
-					else if (Distance < 0.4)
+					else if (Distance < ManualDistance)
 					{
 						Application.ReportError("Profile photo too similar to passport photo.", "en",
 							"PhotoTooSimilar", ValidationErrorType.Client, this);
