@@ -437,12 +437,8 @@ namespace TAG.Identity.TravelDocuments
 					bool IncludePrimaryIdentifier = await RuntimeSettings.GetAsync(typeof(ServiceModule).Namespace + ".IncludePrimaryIdentifier", true);
 					bool IncludeSecondaryIdentifier = await RuntimeSettings.GetAsync(typeof(ServiceModule).Namespace + ".IncludeSecondaryIdentifier", true);
 					bool IncludeOptionalData = await RuntimeSettings.GetAsync(typeof(ServiceModule).Namespace + ".IncludeOptionalData", false);
-					bool IncludeApplicationYear = await RuntimeSettings.GetAsync(typeof(ServiceModule).Namespace + ".IncludeApplicationYear", false);
-					bool IncludeApplicationMonth = await RuntimeSettings.GetAsync(typeof(ServiceModule).Namespace + ".IncludeApplicationMonth", false);
-					bool IncludeApplicationDay = await RuntimeSettings.GetAsync(typeof(ServiceModule).Namespace + ".IncludeApplicationDay", false);
 					string Salt = await RuntimeSettings.GetAsync(typeof(ServiceModule).Namespace + ".Salt", string.Empty);
 					StringBuilder sb = new();
-					DateTime ApplicationTime = DateTime.Today;
 
 					sb.Append(Salt);
 
@@ -486,24 +482,6 @@ namespace TAG.Identity.TravelDocuments
 					{
 						sb.Append('|');
 						sb.Append(DocInfo.OptionalData ?? string.Empty);
-					}
-
-					if (IncludeApplicationYear)
-					{
-						sb.Append('|');
-						sb.Append(ApplicationTime.Year.ToString("D4"));
-					}
-
-					if (IncludeApplicationMonth)
-					{
-						sb.Append('|');
-						sb.Append(ApplicationTime.Month.ToString("D2"));
-					}
-
-					if (IncludeApplicationDay)
-					{
-						sb.Append('|');
-						sb.Append(ApplicationTime.Day.ToString("D2"));
 					}
 
 					Hash = Hashes.ComputeSHA256Hash(Encoding.UTF8.GetBytes(sb.ToString()));
@@ -786,7 +764,10 @@ namespace TAG.Identity.TravelDocuments
 					Application.IsValid.HasValue && 
 					Application.IsValid.Value)
 				{
-					await PersistedHashes.AddHash(Hash);
+					double LifeCycleDays = await RuntimeSettings.GetAsync(typeof(ServiceModule).Namespace + ".LifeCycleDays", 3652.0);
+					DateTime Expires = DateTime.UtcNow.Date.AddDays(Math.Round(LifeCycleDays));
+
+					await PersistedHashes.AddHash(Expires, Hash);
 				}
 
 				return Distance;

@@ -31,9 +31,7 @@ if exists(Posted) then
 	SetSetting("TAG.Identity.TravelDocuments.IncludePrimaryIdentifier",Boolean(Posted.IncludePrimaryIdentifier) ??? false);
 	SetSetting("TAG.Identity.TravelDocuments.IncludeSecondaryIdentifier",Boolean(Posted.IncludeSecondaryIdentifier) ??? false);
 	SetSetting("TAG.Identity.TravelDocuments.IncludeOptionalData",Boolean(Posted.IncludeOptionalData) ??? false);
-	SetSetting("TAG.Identity.TravelDocuments.IncludeApplicationYear",Boolean(Posted.IncludeApplicationYear) ??? false);
-	SetSetting("TAG.Identity.TravelDocuments.IncludeApplicationMonth",Boolean(Posted.IncludeApplicationMonth) ??? false);
-	SetSetting("TAG.Identity.TravelDocuments.IncludeApplicationDay",Boolean(Posted.IncludeApplicationDay) ??? false);
+	SetSetting("TAG.Identity.TravelDocuments.LifeCycleDays",Number(Posted.LifeCycleDays) ??? 3652);
 	SetSetting("TAG.Identity.TravelDocuments.Salt",Str(Posted.Salt));
 
 	SeeOther("Settings.md")
@@ -131,24 +129,10 @@ if exists(Posted) then
 </p>
 
 <p>
-<input type="checkbox" id="IncludeApplicationYear" name="IncludeApplicationYear" 
-	title="Includes application year in the verification process, if checked." 
-	{{GetSetting("TAG.Identity.TravelDocuments.IncludeApplicationYear",false) ? "checked" : ""}}/>
-<label for="IncludeApplicationYear">Include application year in uniqueness verification.</label>
-</p>
-
-<p>
-<input type="checkbox" id="IncludeApplicationMonth" name="IncludeApplicationMonth" 
-	title="Includes application month in the verification process, if checked." 
-	{{GetSetting("TAG.Identity.TravelDocuments.IncludeApplicationMonth",false) ? "checked" : ""}}/>
-<label for="IncludeApplicationMonth">Include application month in uniqueness verification.</label>
-</p>
-
-<p>
-<input type="checkbox" id="IncludeApplicationDay" name="IncludeApplicationDay" 
-	title="Includes application day in the verification process, if checked." 
-	{{GetSetting("TAG.Identity.TravelDocuments.IncludeApplicationDay",false) ? "checked" : ""}}/>
-<label for="IncludeApplicationDay">Include application day in uniqueness verification.</label>
+<label for="LifeCycleDays">Life Cycle Days:</label>  
+<input type="number" id="LifeCycleDays" name="LifeCycleDays" min="0" step="1" max="3652"
+	value='{{Str(GetSetting("TAG.Identity.TravelDocuments.LifeCycleDays",3652.0))}}' required 
+	title="Number of days the uniqueness hash digests are kept."/>
 </p>
 
 <p>
