@@ -10,7 +10,7 @@ Login: /Login.md
 
 ========================================================================
 
-<form action="TravelDocuments.md" method="post">
+<form action="Settings.md" method="post">
 <fieldset>
 <legend>Travel Documents Authenticator settings</legend>
 

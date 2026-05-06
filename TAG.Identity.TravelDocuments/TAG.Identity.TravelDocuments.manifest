@@ -7,7 +7,7 @@
 	<Assembly fileName="TAG.Networking.DeepFace.dll"/>
 	<Folder name="Root">
 		<Folder name="TravelDocuments">
-			<Content fileName="TravelDocuments.md"/>
+			<Content fileName="Settings.md"/>
 		</Folder>
 	</Folder>
 </Module>

@@ -6,12 +6,11 @@
 	</PropertyGroup>
 
   <ItemGroup>
-    <None Remove="Root\TravelDocuments\TravelDocuments.md" />
     <None Remove="TAG.Identity.TravelDocuments.manifest" />
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="Root\TravelDocuments\TravelDocuments.md">
+    <Content Include="Root\TravelDocuments\Settings.md">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <Content Include="TAG.Identity.TravelDocuments.manifest">

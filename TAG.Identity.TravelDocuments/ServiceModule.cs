@@ -92,7 +92,7 @@ namespace TAG.Identity.TravelDocuments
 		{
 			return Task.FromResult(new IConfigurablePage[]
 				{
-					new ConfigurablePage("Travel Documents Authenticator", "/TravelDocuments/TravelDocuments.md", RequiredPrivilege)
+					new ConfigurablePage("Travel Documents Authenticator", "/TravelDocuments/Settings.md", RequiredPrivilege)
 				});
 		}
 
