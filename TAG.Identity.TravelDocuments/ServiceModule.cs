@@ -156,6 +156,21 @@ namespace TAG.Identity.TravelDocuments
 					return s;
 			}
 
+			if (Application.Preview)
+			{
+				foreach (KeyValuePair<string, object> Claim in Application.Claims)
+				{
+					if (Claim.Key == "ID" && Claim.Value is string s)
+					{
+						int i = s.IndexOf('@');
+						if (i > 0)
+							s = s[..i];
+
+						return s;
+					}
+				}
+			}
+
 			return string.Empty;
 		}
 
