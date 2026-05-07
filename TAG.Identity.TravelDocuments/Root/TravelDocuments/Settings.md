@@ -5,6 +5,7 @@ Author: Peter Waher
 Master: /Master.md
 Cache-Control: max-age=0, no-cache, no-store
 JavaScript: /Sniffers/Sniffer.js
+JavaScript: Settings.js
 UserVariable: User
 Privilege: Admin.Identity.TravelDocuments
 Login: /Login.md
@@ -141,6 +142,8 @@ if exists(Posted) then
 	value='{{Str(GetSetting("TAG.Identity.TravelDocuments.Salt",""))}}' required 
 	title="Salt used in uniqueness hash digests calculation."/>
 </p>
+
+<button type='button' onclick='RandomizeSalt()'>Create Random Salt</button>
 
 </fieldset>
 

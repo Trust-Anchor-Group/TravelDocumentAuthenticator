@@ -7,6 +7,7 @@
 	<Assembly fileName="TAG.Networking.DeepFace.dll"/>
 	<Folder name="Root">
 		<Folder name="TravelDocuments">
+			<Content fileName="Settings.js"/>
 			<Content fileName="Settings.md"/>
 			<Content fileName="Sniffer.md"/>
 		</Folder>
