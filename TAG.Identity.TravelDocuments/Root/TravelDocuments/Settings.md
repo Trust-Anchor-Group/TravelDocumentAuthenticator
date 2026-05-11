@@ -161,6 +161,7 @@ else
 	" disabled"
 }}>Sniffer</button>
 
+<button type='button' onclick='OpenUrl("RepresentFace.md")'>Represent Face</button>
 <button type='button' onclick='OpenUrl("CompareFaces.md")'>Compare Faces</button>
 
 </fieldset>

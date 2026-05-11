@@ -3,10 +3,8 @@ Authorize(User,"Admin.Identity.TravelDocuments");
 
 if Posted matches
 {
-	"Image1": Required(Str(PImage1)),
-	"Image2": Required(Str(PImage2)),
-	"Image1ContentType": Required(Str(PImage1ContentType)),
-	"Image2ContentType": Required(Str(PImage2ContentType)),
+	"Image": Required(Str(PImage)),
+	"ImageContentType": Required(Str(PImageContentType)),
 	"TabID": Required(Str(PTabID))
 } then 
 (
@@ -15,7 +13,7 @@ if Posted matches
 		PushEvent([PTabID], "ShowStep",
 		{
 			"isText": true,
-			"text": "Face comparison started."
+			"text": "Face representation started."
 		});
 
 		DeepFaceUrl := GetSetting("TAG.Identity.TravelDocuments.DeepFaceUrl", "http://localhost:5000/");
@@ -38,55 +36,37 @@ if Posted matches
 		Client:=Create(DeepFaceClient,DeepFaceUrl, AntiSpoofing, TAG.Identity.TravelDocuments.ServiceModule.GetSniffers());
 		try
 		(
-			ImageBin1:=Base64Decode(PImage1);
-			ImageBin2:=Base64Decode(PImage2);
+			ImageBin:=Base64Decode(PImage);
 
 			PushEvent([PTabID], "ShowStep",
 			{
 				"isText": true,
-				"text": "Processing Image 1."
+				"text": "Processing Image."
 			});
 
-			Representations1:=Client.Represent(ImageBin1, PImage1ContentType);
+			Representations:=Client.Represent(ImageBin, PImageContentType);
 
 			PushEvent([PTabID], "ShowStep",
 			{
 				"isText": true,
-				"text": "Faces found in Image 1: "+Str(Representations1.Length)
+				"text": "Faces found in Image: "+Str(Representations.Length)
 			});
 
-			if Representations1.Length=1 then
+			if Representations.Length=1 then
 			(
 				PushEvent([PTabID], "ShowStep",
 				{
 					"isText": true,
-					"text": "Confidence of face in Image 1: "+Str(Representations1[0].FaceConfidence)
+					"text": "Confidence of face in Image: "+Str(Representations[0].FaceConfidence)
 				});
 
-				if Representations1[0].FaceConfidence>=0.95 then
+				if Representations[0].FaceConfidence>=0.95 then
 				(
 					PushEvent([PTabID], "ShowStep",
 					{
-						"isText": true,
-						"text": "Processing Image 2."
+						"isText": false,
+						"text": JSON.Encode(Representations[0], true)
 					});
-
-					Representations2:=Client.Represent(ImageBin2, PImage2ContentType);
-
-					PushEvent([PTabID], "ShowStep",
-					{
-						"isText": true,
-						"text": "Faces found in Image 2: "+Str(Representations2.Length)
-					});
-
-					if Representations2.Length=1 then
-					(
-						PushEvent([PTabID], "ShowStep",
-						{
-							"isText": true,
-							"text": "Confidence of face in Image 2: "+Str(Representations2[0].FaceConfidence)
-						});
-					)
 				)
 			)
 		)

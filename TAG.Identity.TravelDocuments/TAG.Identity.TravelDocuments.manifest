@@ -10,6 +10,9 @@
 			<Content fileName="CompareFaces.js"/>
 			<Content fileName="CompareFaces.md"/>
 			<Content fileName="CompareFaces.ws"/>
+			<Content fileName="RepresentFace.js"/>
+			<Content fileName="RepresentFace.md"/>
+			<Content fileName="RepresentFace.ws"/>
 			<Content fileName="Settings.js"/>
 			<Content fileName="Settings.md"/>
 			<Content fileName="Sniffer.md"/>

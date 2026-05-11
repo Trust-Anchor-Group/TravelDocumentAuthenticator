@@ -13,6 +13,8 @@
 		{
 			"Image1": await FileToBase64(Image1.files[0]),
 			"Image2": await FileToBase64(Image2.files[0]),
+			"Image1ContentType": Image1.files[0].type,
+			"Image2ContentType": Image2.files[0].type,
 			"TabID": TabID
 		});
 }
