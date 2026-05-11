@@ -68,7 +68,7 @@ namespace TAG.Networking.DeepFace
 		/// <param name="Endpoint">Endpoint URI of the DeepFace service.</param>
 		/// <param name="AntiSpoofing">If anti-spoofing should be enabled.</param>
 		public DeepFaceClient(string Endpoint, bool AntiSpoofing, params ISniffer[] Sniffers)
-			: this(new Uri(Endpoint, UriKind.Absolute), AntiSpoofing, Sniffers)
+			: this(new Uri(EnsureTrailingSlash(Endpoint), UriKind.Absolute), AntiSpoofing, Sniffers)
 		{
 		}
 
@@ -80,10 +80,22 @@ namespace TAG.Networking.DeepFace
 		public DeepFaceClient(Uri Endpoint, bool AntiSpoofing, params ISniffer[] Sniffers)
 			: base(true, Sniffers)
 		{
-			this.endpoint = Endpoint;
-			this.endpointRepresent = new Uri(this.endpoint, "/represent");
-			this.endpointVerify = new Uri(this.endpoint, "/verify");
+			if (Endpoint.OriginalString.EndsWith('/'))
+				this.endpoint = Endpoint;
+			else
+				this.endpoint = new Uri(Endpoint.OriginalString + "/", UriKind.Absolute);
+
+			this.endpointRepresent = new Uri(this.endpoint, "represent");
+			this.endpointVerify = new Uri(this.endpoint, "verify");
 			this.antiSpoofing = AntiSpoofing;
+		}
+
+		private static string EnsureTrailingSlash(string s)
+		{
+			if (!s.EndsWith('/'))
+				return s + "/";
+			else
+				return s;
 		}
 
 		/// <summary>
