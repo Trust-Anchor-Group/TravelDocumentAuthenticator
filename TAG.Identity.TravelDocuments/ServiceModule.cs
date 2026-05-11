@@ -152,7 +152,7 @@ namespace TAG.Identity.TravelDocuments
 			sb.AppendLine("Documents available in application:");
 
 			foreach (XmlDocument Doc in Application.Documents)
-				sb.AppendLine(Doc.NamespaceURI + "#" + Doc.LocalName);
+				sb.AppendLine(Doc.DocumentElement.NamespaceURI + "#" + Doc.DocumentElement.LocalName);
 
 			Log.Debug(sb.ToString());
 
@@ -184,7 +184,12 @@ namespace TAG.Identity.TravelDocuments
 				return Grade.NotAtAll;
 			}
 			else
+			{
+				// TODO: Remove
+				Log.Debug("Support Excellent.");
+
 				return Grade.Excellent;
+			}
 		}
 
 		private static string GetPreviewId(IIdentityApplication Application)

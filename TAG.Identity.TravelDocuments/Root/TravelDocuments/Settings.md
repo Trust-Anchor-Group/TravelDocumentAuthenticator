@@ -5,6 +5,7 @@ Author: Peter Waher
 Master: /Master.md
 Cache-Control: max-age=0, no-cache, no-store
 JavaScript: /Sniffers/Sniffer.js
+JavaScript: /Events.js
 JavaScript: Settings.js
 UserVariable: User
 Privilege: Admin.Identity.TravelDocuments
@@ -152,11 +153,15 @@ if exists(Posted) then
 
 <fieldset>
 <legend>Tools</legend>
+
 <button type="button" class="posButton"{{
 if User.HasPrivilege("Admin.Communication.DeepFace") and User.HasPrivilege("Admin.Communication.Sniffer") then
 	" onclick=\"OpenSniffer('Sniffer.md')\""
 else
 	" disabled"
 }}>Sniffer</button>
+
+<button type='button' onclick='OpenUrl("CompareFaces.md")'>Compare Faces</button>
+
 </fieldset>
 </form>
