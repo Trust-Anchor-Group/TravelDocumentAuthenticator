@@ -33,11 +33,17 @@ if Posted matches
 				"Manual Distance: " + Str(ManualDistance)
 		});
 
-		Client:=Create(DeepFaceClient,DeepFaceUrl, AntiSpoofing, []);
+		Client:=Create(DeepFaceClient,DeepFaceUrl, AntiSpoofing, TAG.Identity.TravelDocuments.ServiceModule.GetSniffers());
 		try
 		(
 			Image1:=SKImage.FromEncodedData(Base64Decode(PImage1));
 			Image2:=SKImage.FromEncodedData(Base64Decode(PImage2));
+
+			PushEvent([PTabID], "ShowStep",
+			{
+				"isText": true,
+				"text": "Processing Image 1."
+			});
 
 			Representations1:=Client.Represent(Image1);
 
@@ -57,6 +63,12 @@ if Posted matches
 
 				if Representations1[0].FaceConfidence>=0.95 then
 				(
+					PushEvent([PTabID], "ShowStep",
+					{
+						"isText": true,
+						"text": "Processing Image 2."
+					});
+
 					Representations2:=Client.Represent(Image2);
 
 					PushEvent([PTabID], "ShowStep",

@@ -278,12 +278,21 @@ namespace TAG.Identity.TravelDocuments
 		/// <param name="Application">Identity application.</param>
 		public Task<double?> ValidateDistance(IIdentityApplication Application)
 		{
+			return this.ValidateDistance(Application, GetSniffers());
+		}
+
+		/// <summary>
+		/// Gets registered DeepFace sniffers.
+		/// </summary>
+		/// <returns>Array of sniffers.</returns>
+		public static ISniffer[] GetSniffers()
+		{
 			xmlFileSniffer ??= new XmlFileSniffer(Gateway.AppDataFolder + "DeepFace" + Path.DirectorySeparatorChar +
 				"Log %YEAR%-%MONTH%-%DAY%T%HOUR%.xml",
 				Gateway.AppDataFolder + "Transforms" + Path.DirectorySeparatorChar + "SnifferXmlToHtml.xslt",
 				7, BinaryPresentationMethod.Base64);
 
-			return this.ValidateDistance(Application, xmlFileSniffer, snifferProxy);
+			return [ xmlFileSniffer, snifferProxy ];
 		}
 
 		/// <summary>
