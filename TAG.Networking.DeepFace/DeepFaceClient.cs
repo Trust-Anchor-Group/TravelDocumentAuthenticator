@@ -13,6 +13,8 @@ namespace TAG.Networking.DeepFace
 	/// </summary>
 	public class DeepFaceClient : CommunicationLayer, IDisposable
 	{
+		private const int MaxResolution = 640;
+
 		private static readonly string[] modelNames =
 		[
 			"VGG-Face",
@@ -137,9 +139,20 @@ namespace TAG.Networking.DeepFace
 		public Task<FaceRepresentation[]> Represent(FaceRecognitionModel Model,
 			DetectorBackend DetectorBackend, SKImage Image)
 		{
-			using SKData Data = Image.Encode(SKEncodedImageFormat.Png, 0);
-			return this.Represent(Model, DetectorBackend, Data.ToArray(),
-				ImageCodec.ContentTypePng);
+			SKImage Image2 = CheckScale(Image);
+			bool DisposeImage2 = Image2 != Image;
+
+			try
+			{
+				using SKData Data = Image2.Encode(SKEncodedImageFormat.Png, 0);
+				return this.RepresentScaled(Model, DetectorBackend, Data.ToArray(),
+					ImageCodec.ContentTypePng);
+			}
+			finally
+			{
+				if (DisposeImage2)
+					Image2.Dispose();
+			}
 		}
 
 		/// <summary>
@@ -175,7 +188,64 @@ namespace TAG.Networking.DeepFace
 		/// <param name="Image">The image containing the faces.</param>
 		/// <param name="ImageContentType">Image Content-Type</param>
 		/// <returns>An array of face representations.</returns>
-		public async Task<FaceRepresentation[]> Represent(FaceRecognitionModel Model,
+		public Task<FaceRepresentation[]> Represent(FaceRecognitionModel Model,
+			DetectorBackend DetectorBackend, byte[] Image, string ImageContentType)
+		{
+			Image = CheckScale(Image, ref ImageContentType);
+			return this.RepresentScaled(Model, DetectorBackend, Image, ImageContentType);
+		}
+
+		private static SKImage CheckScale(SKImage Image)
+		{
+			if (Image.Width <= MaxResolution && Image.Height <= MaxResolution)
+				return Image;
+
+			double s1 = ((double)MaxResolution) / Image.Width;
+			double s2 = ((double)MaxResolution) / Image.Height;
+			double s = Math.Min(s1, s2);
+			int Width = (int)(Image.Width * s + 0.5);
+			int Height = (int)(Image.Height * s + 0.5);
+
+			SKSamplingOptions Options = new(SKCubicResampler.Mitchell);
+
+			using SKSurface Surface = SKSurface.Create(new SKImageInfo(Width, Height, SKImageInfo.PlatformColorType, SKAlphaType.Premul));
+			SKCanvas Canvas = Surface.Canvas;
+
+			Canvas.DrawImage(Image, new SKRect(0, 0, Width, Height), Options);
+
+			return Surface.Snapshot();
+		}
+
+		private static byte[] CheckScale(byte[] EncodedImage, ref string ContentType)
+		{
+			using SKImage Image = SKImage.FromEncodedData(EncodedImage);
+			SKImage Image2 = CheckScale(Image);
+
+			if (Image == Image2)
+				return EncodedImage;
+
+			try
+			{
+				using SKData Data = Image2.Encode(SKEncodedImageFormat.Png, 0);
+				ContentType = ImageCodec.ContentTypePng;
+
+				return Data.ToArray();
+			}
+			finally
+			{
+				Image2.Dispose();
+			}
+		}
+
+		/// <summary>
+		/// Generates representations of faces from the given image.
+		/// </summary>
+		/// <param name="Model">Face recognition model</param>
+		/// <param name="DetectorBackend">Detector backend</param>
+		/// <param name="Image">The image containing the faces.</param>
+		/// <param name="ImageContentType">Image Content-Type</param>
+		/// <returns>An array of face representations.</returns>
+		private async Task<FaceRepresentation[]> RepresentScaled(FaceRecognitionModel Model,
 			DetectorBackend DetectorBackend, byte[] Image, string ImageContentType)
 		{
 			Dictionary<string, object> Request = new()
