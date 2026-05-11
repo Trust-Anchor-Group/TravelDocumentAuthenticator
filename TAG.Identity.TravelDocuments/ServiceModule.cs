@@ -132,18 +132,57 @@ namespace TAG.Identity.TravelDocuments
 		/// <returns>How well objects of this type are supported.</returns>
 		public Grade Supports(IIdentityApplication Application)
 		{
+			// TODO: Remove
+		
+			StringBuilder sb = new();
+			sb.AppendLine("Checking support.");
+			sb.AppendLine();
+			sb.AppendLine("Claims available in application:");
+
+			foreach (KeyValuePair<string, object> P2 in Application.Claims)
+				sb.AppendLine(P2.Key);
+
+			sb.AppendLine();
+			sb.AppendLine("Photos available in application:");
+
+			foreach (IPhoto P3 in Application.Photos)
+				sb.AppendLine(P3.FileName);
+
+			sb.AppendLine();
+			sb.AppendLine("Documents available in application:");
+
+			foreach (XmlDocument Doc in Application.Documents)
+				sb.AppendLine(Doc.NamespaceURI + "#" + Doc.LocalName);
+
+			Log.Debug(sb.ToString());
+
 			string PreviewId = GetPreviewId(Application);
 			if (string.IsNullOrEmpty(PreviewId))
+			{
+				// TODO: Remove
+				Log.Debug("No Preview ID found.");
+
 				return Grade.NotAtAll;
+			}
 
 			IPhoto ProfilePhoto = GetProfilePhoto(Application);
 			if (ProfilePhoto is null)
+			{
+				// TODO: Remove
+				Log.Debug("No Profile Photo found.");
+
 				return Grade.NotAtAll;
+			}
 
 			KeyValuePair<XmlDocument, DocumentInformation> P = GetNfcDocument(Application);
 
 			if (P.Key is null || P.Value is null)
+			{
+				// TODO: Remove
+				Log.Debug("No NFC document found.");
+
 				return Grade.NotAtAll;
+			}
 			else
 				return Grade.Excellent;
 		}
