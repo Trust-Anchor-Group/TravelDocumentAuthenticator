@@ -3,7 +3,6 @@ using System.Diagnostics.CodeAnalysis;
 using Waher.Content;
 using Waher.Content.Getters;
 using Waher.Content.Images;
-using Waher.Content.Images.Exif;
 using Waher.Content.Json;
 using Waher.Networking;
 using Waher.Networking.Sniffers;
@@ -15,8 +14,6 @@ namespace TAG.Networking.DeepFace
 	/// </summary>
 	public class DeepFaceClient : CommunicationLayer, IDisposable
 	{
-		private const int MaxResolution = 640;
-
 		private static readonly string[] modelNames =
 		[
 			"VGG-Face",
@@ -150,20 +147,9 @@ namespace TAG.Networking.DeepFace
 		public Task<FaceRepresentation[]> Represent(FaceRecognitionModel Model,
 			DetectorBackend DetectorBackend, SKImage Image)
 		{
-			SKImage Image2 = CheckScaleAndRotation(Image, 0);
-			bool DisposeImage2 = Image2 != Image;
-
-			try
-			{
-				using SKData Data = Image2.Encode(SKEncodedImageFormat.Png, 0);
-				return this.RepresentScaled(Model, DetectorBackend, Data.ToArray(),
-					ImageCodec.ContentTypePng);
-			}
-			finally
-			{
-				if (DisposeImage2)
-					Image2.Dispose();
-			}
+			using SKData Data = Image.Encode(SKEncodedImageFormat.Png, 0);
+			return this.Represent(Model, DetectorBackend, Data.ToArray(),
+				ImageCodec.ContentTypePng);
 		}
 
 		/// <summary>
@@ -199,153 +185,7 @@ namespace TAG.Networking.DeepFace
 		/// <param name="Image">The image containing the faces.</param>
 		/// <param name="ImageContentType">Image Content-Type</param>
 		/// <returns>An array of face representations.</returns>
-		public Task<FaceRepresentation[]> Represent(FaceRecognitionModel Model,
-			DetectorBackend DetectorBackend, byte[] Image, string ImageContentType)
-		{
-			Image = CheckScaleAndRotation(Image, ref ImageContentType);
-			return this.RepresentScaled(Model, DetectorBackend, Image, ImageContentType);
-		}
-
-		private static SKImage CheckScaleAndRotation(SKImage Image, int Rotation)
-		{
-			// TODO: Is downscaling necessary?
-
-			return Image;
-
-			if (Image.Width <= MaxResolution && Image.Height <= MaxResolution && Rotation == 0)
-				return Image;
-
-			double s1 = ((double)MaxResolution) / Image.Width;
-			double s2 = ((double)MaxResolution) / Image.Height;
-			double s = Math.Min(1, Math.Min(s1, s2));
-			int ScaledWidth = (int)(Image.Width * s + 0.5);
-			int ScaledHeight = (int)(Image.Height * s + 0.5);
-			int ResultWidth;
-			int ResultHeight;
-
-			// SkiaSharp now handles rotation properly. (But DeepFace does not, so we still need to generate a new image.)
-			//
-			//if (Rotation == 90 || Rotation == -90)
-			//{
-			//	ResultWidth = ScaledHeight;
-			//	ResultHeight = ScaledWidth;
-			//}
-			//else
-			//{
-			//	ResultWidth = ScaledWidth;
-			//	ResultHeight = ScaledHeight;
-			//}
-
-			ResultWidth = ScaledWidth;
-			ResultHeight = ScaledHeight;
-
-			SKSamplingOptions Options = new(SKFilterMode.Linear,
-				SKMipmapMode.Linear);
-
-			using SKSurface Surface = SKSurface.Create(new SKImageInfo(ResultWidth, ResultHeight,
-				SKImageInfo.PlatformColorType, SKAlphaType.Premul));
-			SKCanvas Canvas = Surface.Canvas;
-
-			//Canvas.Translate(ScaledWidth >> 1, ScaledHeight >> 1);
-			//Canvas.RotateDegrees(Rotation);
-			//Canvas.Translate(-(ScaledWidth >> 1), -(ScaledHeight >> 1));
-
-			Canvas.DrawImage(Image, new SKRect(0, 0, ScaledWidth, ScaledHeight), Options);
-
-			// TODO: Remove
-
-			SKImage Image1 = Surface.Snapshot();
-			using SKData Data1 = Image1.Encode(SKEncodedImageFormat.Png, 0);
-			File.WriteAllBytes("c:\\Temp\\1.png", Data1.ToArray());
-
-			return Surface.Snapshot();
-		}
-
-		private static byte[] CheckScaleAndRotation(byte[] EncodedImage, ref string ContentType)
-		{
-			int Rotation;
-
-			if (EXIF.TryExtractFromJPeg(EncodedImage, out ExifTag[] Tags))
-				Rotation = GetImageRotation(Tags);
-			else
-				Rotation = 0;
-
-			using SKImage Image = SKImage.FromEncodedData(EncodedImage);
-			SKImage Image2 = CheckScaleAndRotation(Image, Rotation);
-
-			if (Image == Image2)
-				return EncodedImage;
-
-			try
-			{
-				using SKData Data = Image2.Encode(SKEncodedImageFormat.Png, 0);
-				ContentType = ImageCodec.ContentTypePng;
-
-				return Data.ToArray();
-			}
-			finally
-			{
-				Image2.Dispose();
-			}
-		}
-
-		/// <summary>
-		/// Gets the rotation angle to use, to display the image correctly in Xamarin Forms.
-		/// </summary>
-		/// <param name="JpegImage">Binary representation of JPEG image.</param>
-		/// <returns>Rotation angle (degrees).</returns>
-		public static int GetImageRotation(byte[] JpegImage)
-		{
-			if (JpegImage is null)
-				return 0;
-
-			if (!EXIF.TryExtractFromJPeg(JpegImage, out ExifTag[] Tags))
-				return 0;
-
-			return GetImageRotation(Tags);
-		}
-
-		/// <summary>
-		/// Gets the rotation angle to use, to display the image correctly in Xamarin Forms.
-		/// </summary>
-		/// <param name="Tags">EXIF Tags encoded in image.</param>
-		/// <returns>Rotation angle (degrees).</returns>
-		public static int GetImageRotation(ExifTag[] Tags)
-		{
-			foreach (ExifTag Tag in Tags)
-			{
-				if (Tag.Name == ExifTagName.Orientation)
-				{
-					if (Tag.Value is ushort Orientation)
-					{
-						return Orientation switch
-						{
-							1 => 0,// Top left. Default orientation.
-							2 => 0,// Top right. Horizontally reversed.
-							3 => 180,// Bottom right. Rotated by 180 degrees.
-							4 => 180,// Bottom left. Rotated by 180 degrees and then horizontally reversed.
-							5 => -90,// Left top. Rotated by 90 degrees counterclockwise and then horizontally reversed.
-							6 => 90,// Right top. Rotated by 90 degrees clockwise.
-							7 => 90,// Right bottom. Rotated by 90 degrees clockwise and then horizontally reversed.
-							8 => -90,// Left bottom. Rotated by 90 degrees counterclockwise.
-							_ => 0,
-						};
-					}
-				}
-			}
-
-			return 0;
-		}
-
-		/// <summary>
-		/// Generates representations of faces from the given image.
-		/// </summary>
-		/// <param name="Model">Face recognition model</param>
-		/// <param name="DetectorBackend">Detector backend</param>
-		/// <param name="Image">The image containing the faces.</param>
-		/// <param name="ImageContentType">Image Content-Type</param>
-		/// <returns>An array of face representations.</returns>
-		private async Task<FaceRepresentation[]> RepresentScaled(FaceRecognitionModel Model,
+		public async Task<FaceRepresentation[]> Represent(FaceRecognitionModel Model,
 			DetectorBackend DetectorBackend, byte[] Image, string ImageContentType)
 		{
 			Dictionary<string, object> Request = new()
