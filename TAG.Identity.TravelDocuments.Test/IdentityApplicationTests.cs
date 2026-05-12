@@ -1,4 +1,6 @@
-﻿using NeuroAccess.Nfc.TravelDocuments;
+﻿using NeuroAccess.Nfc;
+using NeuroAccess.Nfc.TravelDocuments;
+using NeuroAccess.Nfc.TravelDocuments.DataObjects;
 using Paiwise;
 using System.Text;
 using System.Xml;
@@ -167,6 +169,30 @@ namespace TAG.Identity.TravelDocuments.Test
 			}
 		}
 
+		[TestMethod]
+		[DataRow("Passport01", "f9642411-08a4-4db7-8e50-c1bcbdbe016f", "NFC.xml")]
+		public async Task Test_04_ReplayNfcReadoutOnly(string Folder, string PreviewId, string NfcFile)
+		{
+			XmlDocument Nfc = LoadDocument(Folder, NfcFile);
+			IsoDepReplay Replay = new(Nfc);
+			byte[] LocalKeySeed = Encoding.UTF8.GetBytes(PreviewId);
+			using TravelDocumentsClient Client = new(Replay, Replay.DocumentInfo, LocalKeySeed);
+
+			Client.ReadDG1 = true;
+			Client.ReadDG2 = true;
+			Client.ReadDG11 = false;
+			Client.ReadDG12 = false;
+
+			AuthenticateResult AuthResult = await Client.Authenticate();
+			Assert.AreEqual(AuthenticateResult.Success, AuthResult, "NFC replay authentication failed.");
+
+			string OnboardingNeuron = await RuntimeSettings.GetAsync("Onboarding.DomainName", "id.tagroot.io");
+			ReadTravelDocumentResult ReadResult = await Client.ReadTravelDocument(OnboardingNeuron);
+
+			Assert.AreEqual(ReadTravelDocumentResult.Success, ReadResult, "NFC replay read failed.");
+			Assert.IsTrue(HasFaceRepresentation(Client), "Face not available in embedded Travel Document.");
+		}
+
 		private static string GetPath(string Folder, string FileName)
 		{
 			return Path.GetFullPath(Path.Combine("..", "..", "..", "SensitiveData", Folder, FileName));
@@ -192,8 +218,24 @@ namespace TAG.Identity.TravelDocuments.Test
 		{
 			XmlDocument Doc = new();
 			Doc.Load(GetPath(Folder, FileName));
-			
+
 			return Doc;
+		}
+
+		private static bool HasFaceRepresentation(TravelDocumentsClient Client)
+		{
+			if (Client.BiometricEncodingFace is null)
+				return false;
+
+			foreach (BiometricInformationTemplate Template in Client.BiometricEncodingFace)
+			{
+				NeuroAccess.Nfc.TravelDocuments.ISO19794.Representation[]? Representations =
+					Template.BiometricDataBlock?.Record?.Representations;
+				if (Representations is not null && Representations.Length > 0)
+					return true;
+			}
+
+			return false;
 		}
 
 		public static PersonalInformation Create(IEnumerable<KeyValuePair<string, object>> Properties)
