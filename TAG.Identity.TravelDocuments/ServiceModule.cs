@@ -133,7 +133,7 @@ namespace TAG.Identity.TravelDocuments
 		public Grade Supports(IIdentityApplication Application)
 		{
 			// TODO: Remove
-		
+
 			StringBuilder sb = new();
 			sb.AppendLine("Checking support.");
 			sb.AppendLine();
@@ -292,7 +292,7 @@ namespace TAG.Identity.TravelDocuments
 				Gateway.AppDataFolder + "Transforms" + Path.DirectorySeparatorChar + "SnifferXmlToHtml.xslt",
 				7, BinaryPresentationMethod.Base64);
 
-			return [ xmlFileSniffer, snifferProxy ];
+			return [xmlFileSniffer, snifferProxy];
 		}
 
 		/// <summary>
@@ -416,7 +416,7 @@ namespace TAG.Identity.TravelDocuments
 				{
 					using SKImage TravelDocumentFaceImage = SKImage.FromBitmap(TravelDocumentFaceBitmap);
 
-					DeepFace.AntiSpoofing = false;	// No need for the cryptographically protected passport photo. Saves time and resources.
+					DeepFace.AntiSpoofing = false;  // No need for the cryptographically protected passport photo. Saves time and resources.
 
 					FaceRepresentation[] TravelDocumentRepresentations = await DeepFace.Represent(TravelDocumentFaceImage);
 
@@ -833,7 +833,7 @@ namespace TAG.Identity.TravelDocuments
 				}
 
 				if (Hash is not null &&
-					Application.IsValid.HasValue && 
+					Application.IsValid.HasValue &&
 					Application.IsValid.Value)
 				{
 					double LifeCycleDays = await RuntimeSettings.GetAsync(typeof(ServiceModule).Namespace + ".LifeCycleDays", 3652.0);
@@ -846,7 +846,16 @@ namespace TAG.Identity.TravelDocuments
 			}
 			catch (Exception ex)
 			{
-				Application.ReportError(ex.Message, null, null, ValidationErrorType.Service, this);
+				string Language = null;
+				string Code = null;
+
+				if (ex.Message.Contains("Face could not be detected", StringComparison.InvariantCultureIgnoreCase))
+				{
+					Language = "en";
+					Code = "NoFace";
+				}
+
+				Application.ReportError(ex.Message, Language, Code, ValidationErrorType.Service, this);
 				return null;
 			}
 			finally
