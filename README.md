@@ -48,4 +48,7 @@ invalidates claims. The following table lists the error codes using by the servi
 
 ### TODO
 
-* DeepFace anti-spoofing integration
+The `TravelDocumentAuthenticator` service can use the anti-spoofing feature of DeepFace, if
+available. To enable anti-spoofing, first DeepFace needs to be installed with Torch. (See DeepFace
+documentation how this is done.) Once Torch is installed with DeepFace, you enable anti-spoofing
+protection from the Settings page.
