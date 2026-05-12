@@ -416,7 +416,11 @@ namespace TAG.Identity.TravelDocuments
 				{
 					using SKImage TravelDocumentFaceImage = SKImage.FromBitmap(TravelDocumentFaceBitmap);
 
+					DeepFace.AntiSpoofing = false;	// No need for the cryptographically protected passport photo. Saves time and resources.
+
 					FaceRepresentation[] TravelDocumentRepresentations = await DeepFace.Represent(TravelDocumentFaceImage);
+
+					DeepFace.AntiSpoofing = AntiSpoofing;
 
 					if (TravelDocumentRepresentations.Length == 0)
 					{

@@ -64,7 +64,7 @@ namespace TAG.Networking.DeepFace
 		private readonly Uri endpoint;
 		private readonly Uri endpointRepresent;
 		private readonly Uri endpointVerify;
-		private readonly bool antiSpoofing;
+		private bool antiSpoofing;
 
 		/// <summary>
 		/// DeepFace client.
@@ -100,6 +100,15 @@ namespace TAG.Networking.DeepFace
 				return s + "/";
 			else
 				return s;
+		}
+
+		/// <summary>
+		/// If anti-spoofing should be enabled or not.
+		/// </summary>
+		public bool AntiSpoofing
+		{
+			get => this.antiSpoofing;
+			set => this.antiSpoofing = value;
 		}
 
 		/// <summary>
