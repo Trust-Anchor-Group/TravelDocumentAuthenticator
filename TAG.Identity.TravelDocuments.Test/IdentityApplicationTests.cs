@@ -70,6 +70,14 @@ namespace TAG.Identity.TravelDocuments.Test
 			module = null;
 		}
 
+		[ClassInitialize]
+		public static async Task ClassInitialize(TestContext _)
+		{
+			await RuntimeSettings.SetAsync(typeof(ServiceModule).Namespace + ".DeepFaceUrl", "http://localhost:5000/");
+			await RuntimeSettings.SetAsync(typeof(ServiceModule).Namespace + ".AntiSpoofing", false);
+			await RuntimeSettings.SetAsync(typeof(ServiceModule).Namespace + ".EnforceUniqueness", false);
+		}
+
 		[TestMethod]
 		[DataRow("Passport01", "Claims.json", "ProfilePhoto.jpg", "NFC.xml")]
 		public async Task Test_01_Supports(string Folder, string ClaimsFile, string PhotoFile, string NfcFile)
@@ -94,6 +102,7 @@ namespace TAG.Identity.TravelDocuments.Test
 
 		[TestMethod]
 		[DataRow("Passport01", "Claims.json", "ProfilePhoto.jpg", "NFC.xml")]
+		[DataRow("Passport02", "Claims.json", "ProfilePhoto.jpg", "NFC.xml")]
 		public async Task Test_02_Validate(string Folder, string ClaimsFile, string PhotoFile, string NfcFile)
 		{
 			KeyValuePair<string, object>[] Claims = await LoadClaims(Folder, ClaimsFile);
@@ -170,7 +179,7 @@ namespace TAG.Identity.TravelDocuments.Test
 		}
 
 		[TestMethod]
-		[DataRow("Passport01", "f9642411-08a4-4db7-8e50-c1bcbdbe016f", "NFC.xml")]
+		[DataRow("Passport02", "f9642411-08a4-4db7-8e50-c1bcbdbe016f", "NFC.xml")]
 		public async Task Test_04_ReplayNfcReadoutOnly(string Folder, string PreviewId, string NfcFile)
 		{
 			XmlDocument Nfc = LoadDocument(Folder, NfcFile);
