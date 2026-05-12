@@ -242,7 +242,7 @@ namespace TAG.Networking.DeepFace
 			SKSamplingOptions Options = new(SKFilterMode.Linear,
 				SKMipmapMode.Linear);
 
-			using SKSurface Surface = SKSurface.Create(new SKImageInfo(ResultWidth, ResultHeight, 
+			using SKSurface Surface = SKSurface.Create(new SKImageInfo(ResultWidth, ResultHeight,
 				SKImageInfo.PlatformColorType, SKAlphaType.Premul));
 			SKCanvas Canvas = Surface.Canvas;
 
@@ -475,27 +475,31 @@ namespace TAG.Networking.DeepFace
 			if (Response.HasError)
 			{
 				if (Response.Error is WebException ex &&
-					ex.Content is Dictionary<string, object> Error &&
-					Error.TryGetValue("error", out object? Obj) &&
-					Obj is string ErrorMessage)
-				{
-					int i = ErrorMessage.IndexOf(" - Traceback");
-					if (i > 0)
-						ErrorMessage = ErrorMessage[..i].TrimEnd();
-
-					if (ErrorMessage.StartsWith("Exception while representing: "))
-						ErrorMessage = ErrorMessage[30..];
-
-					this.Error(ErrorMessage);
-					throw new Exception(ErrorMessage);
-				}
-				else
+					ex.Content is not null)
 				{
 					if (this.HasSniffers)
-						this.Error(Response.Error.Message);
+						this.ReceiveText(JSON.Encode(ex.Content, true));
 
-					Response.AssertOk();
+					if (ex.Content is Dictionary<string, object> Error &&
+						Error.TryGetValue("error", out object? Obj) &&
+						Obj is string ErrorMessage)
+					{
+						int i = ErrorMessage.IndexOf(" - Traceback");
+						if (i > 0)
+							ErrorMessage = ErrorMessage[..i].TrimEnd();
+
+						if (ErrorMessage.StartsWith("Exception while representing: "))
+							ErrorMessage = ErrorMessage[30..];
+
+						this.Error(ErrorMessage);
+						throw new DeepFaceException(ErrorMessage);
+					}
 				}
+
+				if (this.HasSniffers)
+					this.Error(Response.Error.Message);
+
+				Response.AssertOk();
 			}
 			else if (this.HasSniffers)
 				this.ReceiveText(JSON.Encode(Response.Decoded, true));
