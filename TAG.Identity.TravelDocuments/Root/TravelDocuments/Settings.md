@@ -59,7 +59,7 @@ if exists(Posted) then
 <input type="checkbox" id="PermitInvalidation" name="PermitInvalidation" 
 	title="Allows invalidation of identity applications, if checked." 
 	{{GetSetting("TAG.Identity.TravelDocuments.PermitInvalidation",true) ? "checked" : ""}}/>
-<label for="PermitInvalidation">Permit invalidation of travel documents.</label>
+<label for="PermitInvalidation">Permit invalidation of identity applications.</label>
 </p>
 
 <p>
