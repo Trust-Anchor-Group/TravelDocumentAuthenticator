@@ -43,7 +43,8 @@ namespace TAG.Identity.TravelDocuments
 	/// Classes implementing this interface, containing a default constructor, will be found and instantiated using the
 	/// <see cref="Waher.Runtime.Inventory.Types"/> static class.
 	/// </remarks>
-	public class ServiceModule : IConfigurableModule, IIdentityAuthenticatorService
+	public class ServiceModule : IConfigurableModule, IIdentityAuthenticatorService,
+		IIdentityStatefulService
 	{
 		private static bool running = false;
 
@@ -605,60 +606,7 @@ namespace TAG.Identity.TravelDocuments
 
 				if (EnforceUniqueness)
 				{
-					bool IncludeDocumentNumber = await RuntimeSettings.GetAsync(typeof(ServiceModule).Namespace + ".IncludeDocumentNumber", true);
-					bool IncludeCountry = await RuntimeSettings.GetAsync(typeof(ServiceModule).Namespace + ".IncludeCountry", true);
-					bool IncludeBirthDate = await RuntimeSettings.GetAsync(typeof(ServiceModule).Namespace + ".IncludeBirthDate", true);
-					bool IncludePrimaryIdentifier = await RuntimeSettings.GetAsync(typeof(ServiceModule).Namespace + ".IncludePrimaryIdentifier", true);
-					bool IncludeSecondaryIdentifier = await RuntimeSettings.GetAsync(typeof(ServiceModule).Namespace + ".IncludeSecondaryIdentifier", true);
-					bool IncludeOptionalData = await RuntimeSettings.GetAsync(typeof(ServiceModule).Namespace + ".IncludeOptionalData", false);
-					string Salt = await RuntimeSettings.GetAsync(typeof(ServiceModule).Namespace + ".Salt", string.Empty);
-					StringBuilder sb = new();
-
-					sb.Append(Salt);
-
-					if (IncludeDocumentNumber)
-					{
-						sb.Append('|');
-						sb.Append(DocInfo.DocumentNumber ?? string.Empty);
-					}
-
-					if (IncludeCountry)
-					{
-						sb.Append('|');
-						sb.Append(DocInfo.IssuingState ?? string.Empty);
-					}
-
-					if (IncludeBirthDate)
-					{
-						sb.Append('|');
-						sb.Append(DocInfo.DateOfBirth ?? string.Empty);
-					}
-
-					if (IncludePrimaryIdentifier)
-					{
-						foreach (string Name in DocInfo.PrimaryIdentifier ?? [])
-						{
-							sb.Append('|');
-							sb.Append(Name);
-						}
-					}
-
-					if (IncludeSecondaryIdentifier)
-					{
-						foreach (string Name in DocInfo.SecondaryIdentifier ?? [])
-						{
-							sb.Append('|');
-							sb.Append(Name);
-						}
-					}
-
-					if (IncludeOptionalData)
-					{
-						sb.Append('|');
-						sb.Append(DocInfo.OptionalData ?? string.Empty);
-					}
-
-					Hash = Hashes.ComputeSHA256Hash(Encoding.UTF8.GetBytes(sb.ToString()));
+					Hash = await ComputeUniquenessHashDigest(DocInfo);
 
 					if (await PersistedHashes.VerifyHash(Hash))
 					{
@@ -1047,6 +995,64 @@ namespace TAG.Identity.TravelDocuments
 			}
 		}
 
+		private static async Task<byte[]> ComputeUniquenessHashDigest(DocumentInformation DocInfo)
+		{
+			bool IncludeDocumentNumber = await RuntimeSettings.GetAsync(typeof(ServiceModule).Namespace + ".IncludeDocumentNumber", true);
+			bool IncludeCountry = await RuntimeSettings.GetAsync(typeof(ServiceModule).Namespace + ".IncludeCountry", true);
+			bool IncludeBirthDate = await RuntimeSettings.GetAsync(typeof(ServiceModule).Namespace + ".IncludeBirthDate", true);
+			bool IncludePrimaryIdentifier = await RuntimeSettings.GetAsync(typeof(ServiceModule).Namespace + ".IncludePrimaryIdentifier", true);
+			bool IncludeSecondaryIdentifier = await RuntimeSettings.GetAsync(typeof(ServiceModule).Namespace + ".IncludeSecondaryIdentifier", true);
+			bool IncludeOptionalData = await RuntimeSettings.GetAsync(typeof(ServiceModule).Namespace + ".IncludeOptionalData", false);
+			string Salt = await RuntimeSettings.GetAsync(typeof(ServiceModule).Namespace + ".Salt", string.Empty);
+			StringBuilder sb = new();
+
+			sb.Append(Salt);
+
+			if (IncludeDocumentNumber)
+			{
+				sb.Append('|');
+				sb.Append(DocInfo.DocumentNumber ?? string.Empty);
+			}
+
+			if (IncludeCountry)
+			{
+				sb.Append('|');
+				sb.Append(DocInfo.IssuingState ?? string.Empty);
+			}
+
+			if (IncludeBirthDate)
+			{
+				sb.Append('|');
+				sb.Append(DocInfo.DateOfBirth ?? string.Empty);
+			}
+
+			if (IncludePrimaryIdentifier)
+			{
+				foreach (string Name in DocInfo.PrimaryIdentifier ?? [])
+				{
+					sb.Append('|');
+					sb.Append(Name);
+				}
+			}
+
+			if (IncludeSecondaryIdentifier)
+			{
+				foreach (string Name in DocInfo.SecondaryIdentifier ?? [])
+				{
+					sb.Append('|');
+					sb.Append(Name);
+				}
+			}
+
+			if (IncludeOptionalData)
+			{
+				sb.Append('|');
+				sb.Append(DocInfo.OptionalData ?? string.Empty);
+			}
+
+			return Hashes.ComputeSHA256Hash(Encoding.UTF8.GetBytes(sb.ToString()));
+		}
+
 		/// <summary>
 		/// Computes the Euclidean L2 norm distance between two vectors, of potentially 
 		/// different lengths. If the vectors are of different lengths, the missing values 
@@ -1183,6 +1189,36 @@ namespace TAG.Identity.TravelDocuments
 			string UserVariable, params string[] Privileges)
 		{
 			return Gateway.AddWebSniffer(SnifferId, Request, observable, UserVariable, Privileges);
+		}
+
+		#endregion
+
+		#region IIdentityStatefulService
+
+		/// <summary>
+		/// Called when an Identity application state has been updated.
+		/// </summary>
+		/// <param name="Application">Identity application.</param>
+		public async Task ApplicationUpdated(IIdentityApplicationState Application)
+		{
+			if (Application.State != IdentityState.Approved)
+				return;
+
+			string PreviewId = GetPreviewId(Application);
+			if (string.IsNullOrEmpty(PreviewId))
+				return;
+
+			KeyValuePair<XmlDocument, DocumentInformation> P = GetNfcDocument(Application);
+			DocumentInformation DocInfo = P.Value;
+
+			if (DocInfo is null)
+				return;
+
+			byte[] Hash = await ComputeUniquenessHashDigest(DocInfo);
+			double LifeCycleDays = await RuntimeSettings.GetAsync(typeof(ServiceModule).Namespace + ".LifeCycleDays", 3652.0);
+			DateTime Expires = DateTime.UtcNow.Date.AddDays(Math.Round(LifeCycleDays));
+
+			await PersistedHashes.AddHash(Expires, Hash);	// Makes sure hash is available in hash store. Only adds record if one is not already added.
 		}
 
 		#endregion
