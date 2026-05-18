@@ -45,6 +45,8 @@ invalidates claims. The following table lists the error codes using by the servi
 | `PhotoMismatch`          | `Profile photo does not match photo in Travel Document.`                       | The face provided in the profile photo does not match the face in the travel document. |
 | `PhotoTooSimilar`        | N/A                                                                            | The face provided in the profile photo is too similar to the face in the travel document, indicating a potential spoofing attempt. Retaking profile photo is recommended. If application was rejected, images were too similar. If application was left for manual review, it indicates images were very similar but not identical. |
 | `DuplicateApplication`   | `An application with the same personal information has already been accepted.` | An application with the same personal information (e.g. same name and birth date) has already been accepted, and uniqueness of applications is enforced. |
+| `InvalidFormat`          | N/A                                                                            | If the profile photo does not match format requirements of the profile photo. |
+| `PhotoNotRecent`         | `Photo must be recent.`                                                        | If the photo contains a timestamp that is too old. |
 
 ### TODO
 

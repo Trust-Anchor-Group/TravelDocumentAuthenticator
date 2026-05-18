@@ -23,6 +23,7 @@ if exists(Posted) then
 	SetSetting("TAG.Identity.TravelDocuments.DeepFaceUrl",Posted.Endpoint);
 	SetSetting("TAG.Identity.TravelDocuments.AntiSpoofing",Boolean(Posted.AntiSpoofing) ??? false);
 	SetSetting("TAG.Identity.TravelDocuments.PermitInvalidation",Boolean(Posted.PermitInvalidation) ??? false);
+	SetSetting("TAG.Identity.TravelDocuments.RequireRecentPhoto",Boolean(Posted.RequireRecentPhoto) ??? false);
 	SetSetting("TAG.Identity.TravelDocuments.MaxDistance",Number(Posted.MaxDistance));
 	SetSetting("TAG.Identity.TravelDocuments.MinDistance",Number(Posted.MinDistance));
 	SetSetting("TAG.Identity.TravelDocuments.ManualDistance",Number(Posted.ManualDistance));
@@ -60,6 +61,13 @@ if exists(Posted) then
 	title="Allows invalidation of identity applications, if checked." 
 	{{GetSetting("TAG.Identity.TravelDocuments.PermitInvalidation",true) ? "checked" : ""}}/>
 <label for="PermitInvalidation">Permit invalidation of identity applications.</label>
+</p>
+
+<p>
+<input type="checkbox" id="RequireRecentPhoto" name="RequireRecentPhoto" 
+	title="Requires a recent profile photo for identity verification, if checked." 
+	{{GetSetting("TAG.Identity.TravelDocuments.RequireRecentPhoto",true) ? "checked" : ""}}/>
+<label for="RequireRecentPhoto">Requires applications to have a recent profile photo.</label>
 </p>
 
 <p>

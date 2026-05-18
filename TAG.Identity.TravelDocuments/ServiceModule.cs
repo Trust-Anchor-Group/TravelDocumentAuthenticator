@@ -16,6 +16,9 @@ using System.Xml;
 using TAG.Identity.TravelDocuments.Data;
 using TAG.Networking.DeepFace;
 using Waher.Content;
+using Waher.Content.Images;
+using Waher.Content.Images.Exif;
+using Waher.Content.Xml;
 using Waher.Events;
 using Waher.IoTGateway;
 using Waher.Networking;
@@ -337,7 +340,7 @@ namespace TAG.Identity.TravelDocuments
 					AuthenticateResult AuthResult = await Client.Authenticate();
 					if (AuthResult != AuthenticateResult.Success)
 					{
-						this.FailAll(Application, "Unable to authenticate NFC document: " + 
+						this.FailAll(Application, "Unable to authenticate NFC document: " +
 							AuthResult.ToString(), PermitInvalidation);
 
 						return null;
@@ -370,7 +373,7 @@ namespace TAG.Identity.TravelDocuments
 					ReadTravelDocumentResult Result = await Client.ReadTravelDocument(OnboardingNeuron);
 					if (Result != ReadTravelDocumentResult.Success)
 					{
-						this.FailAll(Application, "Unable to read embedded Travel Document: " + 
+						this.FailAll(Application, "Unable to read embedded Travel Document: " +
 							Result.ToString(), PermitInvalidation);
 
 						return null;
@@ -378,7 +381,7 @@ namespace TAG.Identity.TravelDocuments
 
 					if (DocInfo is null)
 					{
-						this.FailAll(Application, "MRZ not available in embedded Travel Document.", 
+						this.FailAll(Application, "MRZ not available in embedded Travel Document.",
 							PermitInvalidation);
 
 						return null;
@@ -387,7 +390,7 @@ namespace TAG.Identity.TravelDocuments
 					if (DocInfo.MRZ_Information.Replace("\n", string.Empty).Replace("\r", string.Empty) !=
 						DocInfo2.MRZ_Information.Replace("\n", string.Empty).Replace("\r", string.Empty))
 					{
-						this.FailAll(Application, "MRZ provided in authentication not same as MRZ encoded in Travel Document.", 
+						this.FailAll(Application, "MRZ provided in authentication not same as MRZ encoded in Travel Document.",
 							PermitInvalidation);
 
 						return null;
@@ -395,7 +398,7 @@ namespace TAG.Identity.TravelDocuments
 
 					if (TravelDocumentFace is null)
 					{
-						this.FailAll(Application, "Face not available in embedded Travel Document.", 
+						this.FailAll(Application, "Face not available in embedded Travel Document.",
 							PermitInvalidation);
 
 						return null;
@@ -417,6 +420,7 @@ namespace TAG.Identity.TravelDocuments
 
 				string DeepFaceUrl = await RuntimeSettings.GetAsync(typeof(ServiceModule).Namespace + ".DeepFaceUrl", "http://localhost:5000/");
 				bool AntiSpoofing = await RuntimeSettings.GetAsync(typeof(ServiceModule).Namespace + ".AntiSpoofing", true);
+				bool RequireRecentPhoto = await RuntimeSettings.GetAsync(typeof(ServiceModule).Namespace + ".RequireRecentPhoto", true);
 				double MaxDistance = await RuntimeSettings.GetAsync(typeof(ServiceModule).Namespace + ".MaxDistance", 1.04);    // Facenet512, with Euclidean L2 Norm, typical threshold.
 				double MinDistance = await RuntimeSettings.GetAsync(typeof(ServiceModule).Namespace + ".MinDistance", 0.15);    // Empirical value to avoid clients using an edited passport photo as profile picture.
 				double ManualDistance = await RuntimeSettings.GetAsync(typeof(ServiceModule).Namespace + ".ManualDistance", 0.40);    // Empirical value that leads to manual approval if above Minimum distance, and belwot his threshold.
@@ -426,37 +430,81 @@ namespace TAG.Identity.TravelDocuments
 
 				try
 				{
-					using SKImage TravelDocumentFaceImage = SKImage.FromBitmap(TravelDocumentFaceBitmap);
-
-					DeepFace.AntiSpoofing = false;  // No need for the cryptographically protected passport photo. Saves time and resources.
-
-					FaceRepresentation[] TravelDocumentRepresentations = await DeepFace.Represent(TravelDocumentFaceImage);
-
-					DeepFace.AntiSpoofing = AntiSpoofing;
-
-					if (TravelDocumentRepresentations.Length == 0)
+					if (RequireRecentPhoto)
 					{
-						this.FailAll(Application, "No face detected in NFC document.", 
-							PermitInvalidation);
-						return null;
-					}
-					else if (TravelDocumentRepresentations.Length > 1)
-					{
-						this.FailAll(Application, "More than one face detected in NFC document.", 
-							PermitInvalidation);
+						if (ProfilePhoto.ContentType == ImageCodec.ContentTypeJpg)
+						{
+							if (EXIF.TryExtractFromJPeg(ProfilePhoto.Binary, out ExifTag[] Tags))
+							{
+								DateTime? DateTime = null;
+								DateTime? DateTimeOriginal = null;
+								DateTime? DateTimeDigitized = null;
 
-						return null;
-					}
-					else if (TravelDocumentRepresentations[0].FaceConfidence < .95)
-					{
-						this.FailAll(Application, "Photo in Travel Document too low quality.", 
-							PermitInvalidation);
+								foreach (ExifTag Tag in Tags)
+								{
+									switch (Tag.Name)
+									{
+										case ExifTagName.DateTime:
+											if (TryParseExifDateTime(Tag.Value, out DateTime TP))
+												DateTime = TP;
+											break;
 
-						return null;
+										case ExifTagName.DateTimeOriginal:
+											if (TryParseExifDateTime(Tag.Value, out TP))
+												DateTimeOriginal = TP;
+											break;
+
+										case ExifTagName.DateTimeDigitized:
+											if (TryParseExifDateTime(Tag.Value, out TP))
+												DateTimeDigitized = TP;
+											break;
+									}
+								}
+
+								if (!DateTime.HasValue)
+									DateTime = DateTimeDigitized;
+
+								if (DateTimeOriginal.HasValue)
+									DateTime = DateTimeOriginal;
+
+								if (!DateTime.HasValue)
+								{
+									this.InvalidatePhoto(Application, ProfilePhoto,
+										"No valid timestamp found in photo.", "en", "InvalidFormat",
+										PermitInvalidation);
+
+									return null;
+								}
+								else if (Math.Abs(System.DateTime.Now.Subtract(DateTime.Value).TotalDays)>=1)
+								{
+									this.InvalidatePhoto(Application, ProfilePhoto,
+										"Photo must be recent.", "en", "PhotoNotRecent",
+										PermitInvalidation);
+
+									return null;
+								}
+							}
+							else
+							{
+								this.InvalidatePhoto(Application, ProfilePhoto,
+									"No meta-data found in photo.", "en", "InvalidFormat",
+									PermitInvalidation);
+
+								return null;
+							}
+						}
+						else
+						{
+							this.InvalidatePhoto(Application, ProfilePhoto,
+								"Profile photo must be a JPEG photo.", "en", "InvalidFormat",
+								PermitInvalidation);
+
+							return null;
+						}
 					}
 
 					FaceRepresentation[] ProfilePhotoRepresentations = await DeepFace.Represent(
-						ProfilePhoto.Binary, ProfilePhoto.ContentType);
+							ProfilePhoto.Binary, ProfilePhoto.ContentType);
 
 					if (ProfilePhotoRepresentations.Length == 0)
 					{
@@ -468,16 +516,43 @@ namespace TAG.Identity.TravelDocuments
 					}
 					else if (ProfilePhotoRepresentations.Length > 1)
 					{
-						this.InvalidatePhoto(Application, ProfilePhoto, 
-							"Multiple faces detected in profile photo.", "en", "MultipleFaces", 
+						this.InvalidatePhoto(Application, ProfilePhoto,
+							"Multiple faces detected in profile photo.", "en", "MultipleFaces",
 							PermitInvalidation);
 
 						return null;
 					}
 					else if (ProfilePhotoRepresentations[0].FaceConfidence < .95)
 					{
-						this.InvalidatePhoto(Application, ProfilePhoto, 
-							"Low quality profile photo.", "en", "LowQualityPhoto", 
+						this.InvalidatePhoto(Application, ProfilePhoto,
+							"Low quality profile photo.", "en", "LowQualityPhoto",
+							PermitInvalidation);
+
+						return null;
+					}
+
+					using SKImage TravelDocumentFaceImage = SKImage.FromBitmap(TravelDocumentFaceBitmap);
+
+					DeepFace.AntiSpoofing = false;  // No need for the cryptographically protected passport photo. Saves time and resources.
+
+					FaceRepresentation[] TravelDocumentRepresentations = await DeepFace.Represent(TravelDocumentFaceImage);
+
+					if (TravelDocumentRepresentations.Length == 0)
+					{
+						this.FailAll(Application, "No face detected in NFC document.",
+							PermitInvalidation);
+						return null;
+					}
+					else if (TravelDocumentRepresentations.Length > 1)
+					{
+						this.FailAll(Application, "More than one face detected in NFC document.",
+							PermitInvalidation);
+
+						return null;
+					}
+					else if (TravelDocumentRepresentations[0].FaceConfidence < .95)
+					{
+						this.FailAll(Application, "Photo in Travel Document too low quality.",
 							PermitInvalidation);
 
 						return null;
@@ -491,7 +566,7 @@ namespace TAG.Identity.TravelDocuments
 
 					if (Distance > MaxDistance)
 					{
-						this.InvalidatePhoto(Application, ProfilePhoto, 
+						this.InvalidatePhoto(Application, ProfilePhoto,
 							"Profile photo does not match photo in Travel Document.", "en",
 							"PhotoMismatch", PermitInvalidation);
 
@@ -499,8 +574,8 @@ namespace TAG.Identity.TravelDocuments
 					}
 					else if (Distance < MinDistance)
 					{
-						this.InvalidatePhoto(Application, ProfilePhoto, 
-							"Profile photo too similar to passport photo.", "en", "PhotoTooSimilar", 
+						this.InvalidatePhoto(Application, ProfilePhoto,
+							"Profile photo too similar to passport photo.", "en", "PhotoTooSimilar",
 							PermitInvalidation);
 
 						return Distance;
@@ -587,7 +662,7 @@ namespace TAG.Identity.TravelDocuments
 
 					if (await PersistedHashes.VerifyHash(Hash))
 					{
-						this.FailAll(Application, "An application with the same personal information has already been accepted.", 
+						this.FailAll(Application, "An application with the same personal information has already been accepted.",
 							"en", "DuplicateApplication", PermitInvalidation);
 
 						return Distance;
@@ -614,7 +689,7 @@ namespace TAG.Identity.TravelDocuments
 					{
 						if (BirthDay == BirthDate.Value.Day)
 							Application.ClaimValid(PersonalInformation.BirthDayTag, this);
-						else 
+						else
 						{
 							this.InvalidateClaim(Application, PersonalInformation.BirthDayTag,
 								"Birth Day invalid.", "en", "BirthDayInvalid", PermitInvalidation);
@@ -622,7 +697,7 @@ namespace TAG.Identity.TravelDocuments
 
 						if (BirthMonth == BirthDate.Value.Month)
 							Application.ClaimValid(PersonalInformation.BirthMonthTag, this);
-						else 
+						else
 						{
 							this.InvalidateClaim(Application, PersonalInformation.BirthMonthTag,
 								"Birth Month invalid.", "en", "BirthMonthInvalid", PermitInvalidation);
@@ -849,7 +924,7 @@ namespace TAG.Identity.TravelDocuments
 					}
 					else if (!CaseInsensitiveString.IsNullOrEmpty(PersonalInfo.LastNames))
 					{
-						this.InvalidateClaim(Application, PersonalInformation.LastNamesTag, 
+						this.InvalidateClaim(Application, PersonalInformation.LastNamesTag,
 							"Last name(s) invalid.", "en", "LastNameInvalid", PermitInvalidation);
 					}
 				}
@@ -873,7 +948,7 @@ namespace TAG.Identity.TravelDocuments
 					}
 					else if (!CaseInsensitiveString.IsNullOrEmpty(PersonalInfo.FirstName))
 					{
-						this.InvalidateClaim(Application, PersonalInformation.FirstNameTag, 
+						this.InvalidateClaim(Application, PersonalInformation.FirstNameTag,
 							"First name(s) invalid.", "en", "FirstNameInvalid", PermitInvalidation);
 					}
 				}
@@ -1036,6 +1111,26 @@ namespace TAG.Identity.TravelDocuments
 			return Math.Sqrt(d);
 		}
 
+		private static bool TryParseExifDateTime(object Value, out DateTime Timestamp)
+		{
+			if (Value is string s)
+				return TryParseExifDateTime(s, out Timestamp);
+			else
+			{
+				Timestamp = DateTime.MinValue;
+				return false;
+			}
+		}
+
+		private static bool TryParseExifDateTime(string Value, out DateTime Timestamp)
+		{
+			int i = Value.IndexOf(' ');
+			if (i > 0)
+				Value = Value[..i].Replace(':', '-') + 'T' + Value[(i + 1)..];
+
+			return XML.TryParse(Value, out Timestamp);
+		}
+
 		private static string Append(string[] Names)
 		{
 			int c = Names?.Length ?? 0;
@@ -1058,7 +1153,7 @@ namespace TAG.Identity.TravelDocuments
 			return sb.ToString();
 		}
 
-		private void FailAll(IIdentityApplication Application, string Message, 
+		private void FailAll(IIdentityApplication Application, string Message,
 			bool PermitInvalidation)
 		{
 			this.FailAll(Application, Message, "en", "NfcInvalid", PermitInvalidation);
@@ -1073,7 +1168,7 @@ namespace TAG.Identity.TravelDocuments
 				Application.InvalidateAllPhotos(Message, Language, Code);
 			}
 			else
-				Application.ReportError(Message, Language,Code, ValidationErrorType.Client, this);
+				Application.ReportError(Message, Language, Code, ValidationErrorType.Client, this);
 		}
 
 		/// <summary>

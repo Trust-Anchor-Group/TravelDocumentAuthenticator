@@ -74,6 +74,7 @@ namespace TAG.Identity.TravelDocuments.Test
 			await RuntimeSettings.SetAsync(typeof(ServiceModule).Namespace + ".DeepFaceUrl", "http://localhost:5000/");
 			await RuntimeSettings.SetAsync(typeof(ServiceModule).Namespace + ".AntiSpoofing", false);
 			await RuntimeSettings.SetAsync(typeof(ServiceModule).Namespace + ".EnforceUniqueness", false);
+			await RuntimeSettings.SetAsync(typeof(ServiceModule).Namespace + ".RequireRecentPhoto", false);
 		}
 
 		[TestInitialize]
@@ -142,25 +143,30 @@ namespace TAG.Identity.TravelDocuments.Test
 		}
 
 		[TestMethod]
-		[DataRow("Passport01", "Claims.json", "PassportPhoto.png", "NFC.xml", true)]
-		[DataRow("Passport01", "Claims.json", "PassportPhotoBlackWhite.png", "NFC.xml", true)]
-		[DataRow("Passport01", "Claims.json", "PassportPhotoCropped.png", "NFC.xml", true)]
-		[DataRow("Passport01", "Claims.json", "PassportPhotoRotated.png", "NFC.xml", true)]
-		[DataRow("Passport01", "Claims.json", "PassportPhotoSkewed.png", "NFC.xml", true)]
-		[DataRow("Passport01", "Claims.json", "PassportPhotoFlipped.png", "NFC.xml", true)]
-		[DataRow("Passport01", "Claims.json", "PassportPhotoBlur.png", "NFC.xml", true)]
-		[DataRow("Passport01", "Claims.json", "PassportPhoto.png", "NFC.xml", true)]
-		[DataRow("Passport01", "Claims.json", "PassportPhotoBlackWhite.png", "NFC.xml", false)]
-		[DataRow("Passport01", "Claims.json", "PassportPhotoCropped.png", "NFC.xml", false)]
-		[DataRow("Passport01", "Claims.json", "PassportPhotoRotated.png", "NFC.xml", false)]
-		[DataRow("Passport01", "Claims.json", "PassportPhotoSkewed.png", "NFC.xml", false)]
-		[DataRow("Passport01", "Claims.json", "PassportPhotoFlipped.png", "NFC.xml", false)]
-		[DataRow("Passport01", "Claims.json", "PassportPhotoBlur.png", "NFC.xml", false)]
+		[DataRow("Passport01", "Claims.json", "PassportPhoto.png", "NFC.xml", true, false)]
+		[DataRow("Passport01", "Claims.json", "PassportPhotoBlackWhite.png", "NFC.xml", true, false)]
+		[DataRow("Passport01", "Claims.json", "PassportPhotoCropped.png", "NFC.xml", true, false)]
+		[DataRow("Passport01", "Claims.json", "PassportPhotoRotated.png", "NFC.xml", true, false)]
+		[DataRow("Passport01", "Claims.json", "PassportPhotoSkewed.png", "NFC.xml", true, false)]
+		[DataRow("Passport01", "Claims.json", "PassportPhotoFlipped.png", "NFC.xml", true, false)]
+		[DataRow("Passport01", "Claims.json", "PassportPhotoBlur.png", "NFC.xml", true, false)]
+		[DataRow("Passport01", "Claims.json", "PassportPhoto.png", "NFC.xml", true, false)]
+		[DataRow("Passport01", "Claims.json", "PassportPhotoBlackWhite.png", "NFC.xml", false, false)]
+		[DataRow("Passport01", "Claims.json", "PassportPhotoCropped.png", "NFC.xml", false, false)]
+		[DataRow("Passport01", "Claims.json", "PassportPhotoRotated.png", "NFC.xml", false, false)]
+		[DataRow("Passport01", "Claims.json", "PassportPhotoSkewed.png", "NFC.xml", false, false)]
+		[DataRow("Passport01", "Claims.json", "PassportPhotoFlipped.png", "NFC.xml", false, false)]
+		[DataRow("Passport01", "Claims.json", "PassportPhotoBlur.png", "NFC.xml", false, false)]
+		[DataRow("Passport01", "Claims.json", "ProfilePhoto.jpg", "NFC.xml", true, true)]
+		[DataRow("Passport02", "Claims.json", "ProfilePhoto.jpg", "NFC.xml", true, true)]
 		public async Task Test_03_Invalidate(string Folder, string ClaimsFile, string PhotoFile, 
-			string NfcFile, bool PermitInvalidation)
+			string NfcFile, bool PermitInvalidation, bool RequireRecentPhoto)
 		{
 			await RuntimeSettings.SetAsync(typeof(ServiceModule).Namespace + ".PermitInvalidation", 
 				PermitInvalidation);
+
+			await RuntimeSettings.SetAsync(typeof(ServiceModule).Namespace + ".RequireRecentPhoto", 
+				RequireRecentPhoto);
 
 			KeyValuePair<string, object>[] Claims = await LoadClaims(Folder, ClaimsFile);
 			PersonalInformation PI = Create(Claims);
