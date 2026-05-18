@@ -324,6 +324,8 @@ namespace TAG.Identity.TravelDocuments
 				if (Nfc is null || DocInfo is null)
 					return null;
 
+				bool PermitInvalidation = await RuntimeSettings.GetAsync(typeof(ServiceModule).Namespace + ".PermitInvalidation", true);
+
 				// Validate NFC replay document.
 
 				try
@@ -335,7 +337,9 @@ namespace TAG.Identity.TravelDocuments
 					AuthenticateResult AuthResult = await Client.Authenticate();
 					if (AuthResult != AuthenticateResult.Success)
 					{
-						FailAll(Application, "Unable to authenticate NFC document: " + AuthResult.ToString());
+						this.FailAll(Application, "Unable to authenticate NFC document: " + 
+							AuthResult.ToString(), PermitInvalidation);
+
 						return null;
 					}
 
@@ -366,26 +370,34 @@ namespace TAG.Identity.TravelDocuments
 					ReadTravelDocumentResult Result = await Client.ReadTravelDocument(OnboardingNeuron);
 					if (Result != ReadTravelDocumentResult.Success)
 					{
-						FailAll(Application, "Unable to read embedded Travel Document: " + Result.ToString());
+						this.FailAll(Application, "Unable to read embedded Travel Document: " + 
+							Result.ToString(), PermitInvalidation);
+
 						return null;
 					}
 
 					if (DocInfo is null)
 					{
-						FailAll(Application, "MRZ not available in embedded Travel Document.");
+						this.FailAll(Application, "MRZ not available in embedded Travel Document.", 
+							PermitInvalidation);
+
 						return null;
 					}
 
 					if (DocInfo.MRZ_Information.Replace("\n", string.Empty).Replace("\r", string.Empty) !=
 						DocInfo2.MRZ_Information.Replace("\n", string.Empty).Replace("\r", string.Empty))
 					{
-						FailAll(Application, "MRZ provided in authentication not same as MRZ encoded in Travel Document.");
+						this.FailAll(Application, "MRZ provided in authentication not same as MRZ encoded in Travel Document.", 
+							PermitInvalidation);
+
 						return null;
 					}
 
 					if (TravelDocumentFace is null)
 					{
-						FailAll(Application, "Face not available in embedded Travel Document.");
+						this.FailAll(Application, "Face not available in embedded Travel Document.", 
+							PermitInvalidation);
+
 						return null;
 					}
 
@@ -397,7 +409,7 @@ namespace TAG.Identity.TravelDocuments
 					// Manipulation of NFC document results in automatic failure.
 
 					Log.Exception(ex);
-					FailAll(Application, ex.Message);
+					this.FailAll(Application, ex.Message, PermitInvalidation);
 					return null;
 				}
 
@@ -424,17 +436,22 @@ namespace TAG.Identity.TravelDocuments
 
 					if (TravelDocumentRepresentations.Length == 0)
 					{
-						FailAll(Application, "No face detected in NFC document.");
+						this.FailAll(Application, "No face detected in NFC document.", 
+							PermitInvalidation);
 						return null;
 					}
 					else if (TravelDocumentRepresentations.Length > 1)
 					{
-						FailAll(Application, "More than one face detected in NFC document.");
+						this.FailAll(Application, "More than one face detected in NFC document.", 
+							PermitInvalidation);
+
 						return null;
 					}
 					else if (TravelDocumentRepresentations[0].FaceConfidence < .95)
 					{
-						FailAll(Application, "Photo in Travel Document too low quality.");
+						this.FailAll(Application, "Photo in Travel Document too low quality.", 
+							PermitInvalidation);
+
 						return null;
 					}
 
@@ -443,20 +460,26 @@ namespace TAG.Identity.TravelDocuments
 
 					if (ProfilePhotoRepresentations.Length == 0)
 					{
-						Application.PhotoInvalid(ProfilePhoto, "No face detected in profile photo.", "en",
-							"NoFace", this);
+						this.InvalidatePhoto(Application, ProfilePhoto,
+							"No face detected in profile photo.", "en", "NoFace",
+							PermitInvalidation);
+
 						return null;
 					}
 					else if (ProfilePhotoRepresentations.Length > 1)
 					{
-						Application.PhotoInvalid(ProfilePhoto, "Multiple faces detected in profile photo.", "en",
-							"MultipleFaces", this);
+						this.InvalidatePhoto(Application, ProfilePhoto, 
+							"Multiple faces detected in profile photo.", "en", "MultipleFaces", 
+							PermitInvalidation);
+
 						return null;
 					}
 					else if (ProfilePhotoRepresentations[0].FaceConfidence < .95)
 					{
-						Application.PhotoInvalid(ProfilePhoto, "Low quality profile photo.", "en",
-							"LowQualityPhoto", this);
+						this.InvalidatePhoto(Application, ProfilePhoto, 
+							"Low quality profile photo.", "en", "LowQualityPhoto", 
+							PermitInvalidation);
+
 						return null;
 					}
 
@@ -468,14 +491,18 @@ namespace TAG.Identity.TravelDocuments
 
 					if (Distance > MaxDistance)
 					{
-						Application.PhotoInvalid(ProfilePhoto, "Profile photo does not match photo in Travel Document.", "en",
-							"PhotoMismatch", this);
+						this.InvalidatePhoto(Application, ProfilePhoto, 
+							"Profile photo does not match photo in Travel Document.", "en",
+							"PhotoMismatch", PermitInvalidation);
+
 						return Distance;
 					}
 					else if (Distance < MinDistance)
 					{
-						Application.PhotoInvalid(ProfilePhoto, "Profile photo too similar to passport photo.", "en",
-							"PhotoTooSimilar", this);
+						this.InvalidatePhoto(Application, ProfilePhoto, 
+							"Profile photo too similar to passport photo.", "en", "PhotoTooSimilar", 
+							PermitInvalidation);
+
 						return Distance;
 					}
 					else if (Distance < ManualDistance)
@@ -560,7 +587,9 @@ namespace TAG.Identity.TravelDocuments
 
 					if (await PersistedHashes.VerifyHash(Hash))
 					{
-						FailAll(Application, "An application with the same personal information has already been accepted.", "en", "DuplicateApplication");
+						this.FailAll(Application, "An application with the same personal information has already been accepted.", 
+							"en", "DuplicateApplication", PermitInvalidation);
+
 						return Distance;
 					}
 				}
@@ -570,9 +599,12 @@ namespace TAG.Identity.TravelDocuments
 				{
 					if (BirthDate > DateTime.Today)
 					{
-						Application.ClaimInvalid(PersonalInformation.BirthDayTag, "Future birth date.", "en", "FutureBirthDate", this);
-						Application.ClaimInvalid(PersonalInformation.BirthMonthTag, "Future birth date.", "en", "FutureBirthDate", this);
-						Application.ClaimInvalid(PersonalInformation.BirthYearTag, "Future birth date.", "en", "FutureBirthDate", this);
+						this.InvalidateClaims(Application,
+						[
+							PersonalInformation.BirthDayTag,
+							PersonalInformation.BirthMonthTag,
+							PersonalInformation.BirthYearTag
+						], "Future birth date.", "en", "FutureBirthDate", PermitInvalidation);
 					}
 					else if (!string.IsNullOrEmpty(DocInfo.DateOfBirth) &&
 						DocInfo.DateOfBirth.Length == 6 &&
@@ -582,18 +614,27 @@ namespace TAG.Identity.TravelDocuments
 					{
 						if (BirthDay == BirthDate.Value.Day)
 							Application.ClaimValid(PersonalInformation.BirthDayTag, this);
-						else
-							Application.ClaimInvalid(PersonalInformation.BirthDayTag, "Birth Day invalid.", "en", "BirthDayInvalid", this);
+						else 
+						{
+							this.InvalidateClaim(Application, PersonalInformation.BirthDayTag,
+								"Birth Day invalid.", "en", "BirthDayInvalid", PermitInvalidation);
+						}
 
 						if (BirthMonth == BirthDate.Value.Month)
 							Application.ClaimValid(PersonalInformation.BirthMonthTag, this);
-						else
-							Application.ClaimInvalid(PersonalInformation.BirthMonthTag, "Birth Month invalid.", "en", "BirthMonthInvalid", this);
+						else 
+						{
+							this.InvalidateClaim(Application, PersonalInformation.BirthMonthTag,
+								"Birth Month invalid.", "en", "BirthMonthInvalid", PermitInvalidation);
+						}
 
 						if (BirthYear == (BirthDate.Value.Year % 100))
 							Application.ClaimValid(PersonalInformation.BirthYearTag, this);
 						else
-							Application.ClaimInvalid(PersonalInformation.BirthYearTag, "Birth Year invalid.", "en", "BirthYearInvalid", this);
+						{
+							this.InvalidateClaim(Application, PersonalInformation.BirthYearTag,
+								"Birth Year invalid.", "en", "BirthYearInvalid", PermitInvalidation);
+						}
 					}
 
 					if (PersonalInfo.AgeAbove.HasValue)
@@ -601,7 +642,10 @@ namespace TAG.Identity.TravelDocuments
 						if (PersonalInfo.Age >= PersonalInfo.AgeAbove.Value)
 							Application.ClaimValid(PersonalInformation.AgeAboveTag, this);
 						else
-							Application.ClaimInvalid(PersonalInformation.AgeAboveTag, "Age not reached.", "en", "AgeNotReached", this);
+						{
+							this.InvalidateClaim(Application, PersonalInformation.AgeAboveTag,
+								"Age not reached.", "en", "AgeNotReached", PermitInvalidation);
+						}
 					}
 				}
 				else if (PersonalInfo.AgeAbove.HasValue &&
@@ -630,7 +674,10 @@ namespace TAG.Identity.TravelDocuments
 						if (Age >= PersonalInfo.AgeAbove.Value)
 							Application.ClaimValid(PersonalInformation.AgeAboveTag, this);
 						else
-							Application.ClaimInvalid(PersonalInformation.AgeAboveTag, "Age not reached.", "en", "AgeNotReached", this);
+						{
+							this.InvalidateClaim(Application, PersonalInformation.AgeAboveTag,
+								"Age not reached.", "en", "AgeNotReached", PermitInvalidation);
+						}
 					}
 					catch (Exception ex)
 					{
@@ -645,7 +692,10 @@ namespace TAG.Identity.TravelDocuments
 					if (ISO_3166_1.CompareCountryCode(PersonalInfo.Country, DocInfo.IssuingState))
 						Application.ClaimValid(PersonalInformation.CountryTag, this);
 					else
-						Application.ClaimInvalid(PersonalInformation.CountryTag, "Country invalid.", "en", "CountryCodeMismatch", this);
+					{
+						this.InvalidateClaim(Application, PersonalInformation.CountryTag,
+							"Country invalid.", "en", "CountryCodeMismatch", PermitInvalidation);
+					}
 				}
 
 				if (!CaseInsensitiveString.IsNullOrEmpty(PersonalInfo.Nationality) &&
@@ -654,7 +704,10 @@ namespace TAG.Identity.TravelDocuments
 					if (ISO_3166_1.CompareCountryCode(PersonalInfo.Nationality, DocInfo.Nationality))
 						Application.ClaimValid(PersonalInformation.NationalityTag, this);
 					else
-						Application.ClaimInvalid(PersonalInformation.NationalityTag, "Nationality invalid.", "en", "NationalityInvalid", this);
+					{
+						this.InvalidateClaim(Application, PersonalInformation.NationalityTag,
+							"Nationality invalid.", "en", "NationalityInvalid", PermitInvalidation);
+					}
 				}
 
 				if (PersonalInfo.Gender.HasValue && !string.IsNullOrEmpty(DocInfo.Gender))
@@ -671,7 +724,10 @@ namespace TAG.Identity.TravelDocuments
 						if (PersonalInfo.Gender.Value == ExpectedGender.Value)
 							Application.ClaimValid(PersonalInformation.GenderTag, this);
 						else
-							Application.ClaimInvalid(PersonalInformation.GenderTag, "Gender invalid.", "en", "GenderInvalid", this);
+						{
+							this.InvalidateClaim(Application, PersonalInformation.GenderTag,
+								"Gender invalid.", "en", "GenderInvalid", PermitInvalidation);
+						}
 					}
 				}
 
@@ -694,7 +750,10 @@ namespace TAG.Identity.TravelDocuments
 							string s = await PNrValidator.Normalize(Country, PersonalInfo.PersonalNumber);
 
 							if (s != PersonalInfo.PersonalNumber)
-								Application.ClaimInvalid(PersonalInformation.PersonalNumberTag, "Personal number not normalized.", "en", "PNrNotNormalized", this);
+							{
+								this.InvalidateClaim(Application, PersonalInformation.PersonalNumberTag,
+									"Personal number not normalized.", "en", "PNrNotNormalized", PermitInvalidation);
+							}
 							else
 							{
 								bool? Valid = await PNrValidator.IsValid(Country, PersonalInfo.PersonalNumber);
@@ -702,7 +761,11 @@ namespace TAG.Identity.TravelDocuments
 								if (Valid.HasValue)
 								{
 									if (!Valid.Value)
-										Application.ClaimInvalid(PersonalInformation.PersonalNumberTag, "Personal number invalid according to national rules.", "en", "PersonalNumberInvalid", this);
+									{
+										this.InvalidateClaim(Application, PersonalInformation.PersonalNumberTag,
+											"Personal number invalid according to national rules.", "en", "PersonalNumberInvalid",
+											PermitInvalidation);
+									}
 									else
 									{
 										bool? AdditionalInfoAsPNr = null;
@@ -750,7 +813,9 @@ namespace TAG.Identity.TravelDocuments
 											!(OptionalDataAsPNr ?? true) ||
 											!(DocumentNrAsPNr ?? true))
 										{
-											Application.ClaimInvalid(PersonalInformation.PersonalNumberTag, "Personal number does not match.", "en", "PersonalNumberMismatch", this);
+											this.InvalidateClaim(Application, PersonalInformation.PersonalNumberTag,
+												"Personal number does not match.", "en", "PersonalNumberMismatch",
+												PermitInvalidation);
 										}
 									}
 								}
@@ -758,7 +823,11 @@ namespace TAG.Identity.TravelDocuments
 						}
 					}
 					else
-						Application.ClaimInvalid(PersonalInformation.PersonalNumberTag, "Country not specified, or available in MRZ.", "en", "CountryNotSpecified", this);
+					{
+						this.InvalidateClaim(Application, PersonalInformation.PersonalNumberTag,
+							"Country not specified, or available in MRZ.", "en", "CountryNotSpecified",
+							PermitInvalidation);
+					}
 				}
 
 				string PrimaryIdentifier = Append(DocInfo.PrimaryIdentifier);
@@ -780,8 +849,8 @@ namespace TAG.Identity.TravelDocuments
 					}
 					else if (!CaseInsensitiveString.IsNullOrEmpty(PersonalInfo.LastNames))
 					{
-						Application.ClaimInvalid(PersonalInformation.LastNamesTag, "Last name(s) invalid.", "en",
-							"LastNameInvalid", this);
+						this.InvalidateClaim(Application, PersonalInformation.LastNamesTag, 
+							"Last name(s) invalid.", "en", "LastNameInvalid", PermitInvalidation);
 					}
 				}
 
@@ -804,8 +873,8 @@ namespace TAG.Identity.TravelDocuments
 					}
 					else if (!CaseInsensitiveString.IsNullOrEmpty(PersonalInfo.FirstName))
 					{
-						Application.ClaimInvalid(PersonalInformation.FirstNameTag, "First name(s) invalid.", "en",
-							"FirstNameInvalid", this);
+						this.InvalidateClaim(Application, PersonalInformation.FirstNameTag, 
+							"First name(s) invalid.", "en", "FirstNameInvalid", PermitInvalidation);
 					}
 				}
 
@@ -821,14 +890,14 @@ namespace TAG.Identity.TravelDocuments
 					}
 					else
 					{
-						Application.ClaimInvalid(PersonalInformation.FullNameTag, "Full name invalid.", "en",
-							"FullNameInvalid", this);
-						Application.ClaimInvalid(PersonalInformation.FirstNameTag, "Full name invalid.", "en",
-							"FullNameInvalid", this);
-						Application.ClaimInvalid(PersonalInformation.MiddleNamesTag, "Full name invalid.", "en",
-							"FullNameInvalid", this);
-						Application.ClaimInvalid(PersonalInformation.LastNamesTag, "Full name invalid.", "en",
-							"FullNameInvalid", this);
+						this.InvalidateClaims(Application,
+							[
+								PersonalInformation.FullNameTag,
+								PersonalInformation.FirstNameTag,
+								PersonalInformation.MiddleNamesTag,
+								PersonalInformation.LastNamesTag
+							],
+							"Full name invalid.", "en", "FullNameInvalid", PermitInvalidation);
 					}
 				}
 
@@ -861,6 +930,45 @@ namespace TAG.Identity.TravelDocuments
 			finally
 			{
 				TravelDocumentFaceBitmap?.Dispose();
+			}
+		}
+
+		private void InvalidateClaim(IIdentityApplication Application, string Claim,
+			string Error, string ErrorLanguage, string ErrorCode, bool PermitInvalidation)
+		{
+			if (PermitInvalidation)
+				Application.ClaimInvalid(Claim, Error, ErrorLanguage, ErrorCode, this);
+			else
+			{
+				Application.ReportError(Error, ErrorLanguage, ErrorCode,
+					ValidationErrorType.Client, this);
+			}
+		}
+
+		private void InvalidateClaims(IIdentityApplication Application, string[] Claims,
+			string Error, string ErrorLanguage, string ErrorCode, bool PermitInvalidation)
+		{
+			if (PermitInvalidation)
+			{
+				foreach (string Claim in Claims)
+					Application.ClaimInvalid(Claim, Error, ErrorLanguage, ErrorCode, this);
+			}
+			else
+			{
+				Application.ReportError(Error, ErrorLanguage, ErrorCode,
+					ValidationErrorType.Client, this);
+			}
+		}
+
+		private void InvalidatePhoto(IIdentityApplication Application, IPhoto Photo,
+			string Error, string ErrorLanguage, string ErrorCode, bool PermitInvalidation)
+		{
+			if (PermitInvalidation)
+				Application.PhotoInvalid(Photo, Error, ErrorLanguage, ErrorCode, this);
+			else
+			{
+				Application.ReportError(Error, ErrorLanguage, ErrorCode,
+					ValidationErrorType.Client, this);
 			}
 		}
 
@@ -950,16 +1058,22 @@ namespace TAG.Identity.TravelDocuments
 			return sb.ToString();
 		}
 
-		private static void FailAll(IIdentityApplication Application, string Message)
+		private void FailAll(IIdentityApplication Application, string Message, 
+			bool PermitInvalidation)
 		{
-			FailAll(Application, Message, "en", "NfcInvalid");
+			this.FailAll(Application, Message, "en", "NfcInvalid", PermitInvalidation);
 		}
 
-		private static void FailAll(IIdentityApplication Application, string Message,
-			string Language, string Code)
+		private void FailAll(IIdentityApplication Application, string Message,
+			string Language, string Code, bool PermitInvalidation)
 		{
-			Application.InvalidateAllClaims(Message, Language, Code);
-			Application.InvalidateAllPhotos(Message, Language, Code);
+			if (PermitInvalidation)
+			{
+				Application.InvalidateAllClaims(Message, Language, Code);
+				Application.InvalidateAllPhotos(Message, Language, Code);
+			}
+			else
+				Application.ReportError(Message, Language,Code, ValidationErrorType.Client, this);
 		}
 
 		/// <summary>

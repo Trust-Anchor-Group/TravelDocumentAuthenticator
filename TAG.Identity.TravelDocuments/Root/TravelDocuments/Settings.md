@@ -22,6 +22,7 @@ if exists(Posted) then
 (
 	SetSetting("TAG.Identity.TravelDocuments.DeepFaceUrl",Posted.Endpoint);
 	SetSetting("TAG.Identity.TravelDocuments.AntiSpoofing",Boolean(Posted.AntiSpoofing) ??? false);
+	SetSetting("TAG.Identity.TravelDocuments.PermitInvalidation",Boolean(Posted.PermitInvalidation) ??? false);
 	SetSetting("TAG.Identity.TravelDocuments.MaxDistance",Number(Posted.MaxDistance));
 	SetSetting("TAG.Identity.TravelDocuments.MinDistance",Number(Posted.MinDistance));
 	SetSetting("TAG.Identity.TravelDocuments.ManualDistance",Number(Posted.ManualDistance));
@@ -52,6 +53,13 @@ if exists(Posted) then
 	title="Enables anti-spoofing protection, if checked." 
 	{{GetSetting("TAG.Identity.TravelDocuments.AntiSpoofing",true) ? "checked" : ""}}/>
 <label for="AntiSpoofing">Anti-spoofing (requires Torch to be installed with DeepFace).</label>
+</p>
+
+<p>
+<input type="checkbox" id="PermitInvalidation" name="PermitInvalidation" 
+	title="Allows invalidation of identity applications, if checked." 
+	{{GetSetting("TAG.Identity.TravelDocuments.PermitInvalidation",true) ? "checked" : ""}}/>
+<label for="PermitInvalidation">Permit invalidation of travel documents.</label>
 </p>
 
 <p>
