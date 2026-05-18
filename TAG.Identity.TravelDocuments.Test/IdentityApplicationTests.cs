@@ -76,6 +76,12 @@ namespace TAG.Identity.TravelDocuments.Test
 			await RuntimeSettings.SetAsync(typeof(ServiceModule).Namespace + ".EnforceUniqueness", false);
 		}
 
+		[TestInitialize]
+		public async Task TestInitialize()
+		{
+			await RuntimeSettings.SetAsync(typeof(ServiceModule).Namespace + ".PermitInvalidation", true);
+		}
+
 		[TestMethod]
 		[DataRow("Passport01", "Claims.json", "ProfilePhoto.jpg", "NFC.xml")]
 		public async Task Test_01_Supports(string Folder, string ClaimsFile, string PhotoFile, string NfcFile)
@@ -136,15 +142,26 @@ namespace TAG.Identity.TravelDocuments.Test
 		}
 
 		[TestMethod]
-		[DataRow("Passport01", "Claims.json", "PassportPhoto.png", "NFC.xml")]
-		[DataRow("Passport01", "Claims.json", "PassportPhotoBlackWhite.png", "NFC.xml")]
-		[DataRow("Passport01", "Claims.json", "PassportPhotoCropped.png", "NFC.xml")]
-		[DataRow("Passport01", "Claims.json", "PassportPhotoRotated.png", "NFC.xml")]
-		[DataRow("Passport01", "Claims.json", "PassportPhotoSkewed.png", "NFC.xml")]
-		[DataRow("Passport01", "Claims.json", "PassportPhotoFlipped.png", "NFC.xml")]
-		[DataRow("Passport01", "Claims.json", "PassportPhotoBlur.png", "NFC.xml")]
-		public async Task Test_03_Invalidate(string Folder, string ClaimsFile, string PhotoFile, string NfcFile)
+		[DataRow("Passport01", "Claims.json", "PassportPhoto.png", "NFC.xml", true)]
+		[DataRow("Passport01", "Claims.json", "PassportPhotoBlackWhite.png", "NFC.xml", true)]
+		[DataRow("Passport01", "Claims.json", "PassportPhotoCropped.png", "NFC.xml", true)]
+		[DataRow("Passport01", "Claims.json", "PassportPhotoRotated.png", "NFC.xml", true)]
+		[DataRow("Passport01", "Claims.json", "PassportPhotoSkewed.png", "NFC.xml", true)]
+		[DataRow("Passport01", "Claims.json", "PassportPhotoFlipped.png", "NFC.xml", true)]
+		[DataRow("Passport01", "Claims.json", "PassportPhotoBlur.png", "NFC.xml", true)]
+		[DataRow("Passport01", "Claims.json", "PassportPhoto.png", "NFC.xml", true)]
+		[DataRow("Passport01", "Claims.json", "PassportPhotoBlackWhite.png", "NFC.xml", false)]
+		[DataRow("Passport01", "Claims.json", "PassportPhotoCropped.png", "NFC.xml", false)]
+		[DataRow("Passport01", "Claims.json", "PassportPhotoRotated.png", "NFC.xml", false)]
+		[DataRow("Passport01", "Claims.json", "PassportPhotoSkewed.png", "NFC.xml", false)]
+		[DataRow("Passport01", "Claims.json", "PassportPhotoFlipped.png", "NFC.xml", false)]
+		[DataRow("Passport01", "Claims.json", "PassportPhotoBlur.png", "NFC.xml", false)]
+		public async Task Test_03_Invalidate(string Folder, string ClaimsFile, string PhotoFile, 
+			string NfcFile, bool PermitInvalidation)
 		{
+			await RuntimeSettings.SetAsync(typeof(ServiceModule).Namespace + ".PermitInvalidation", 
+				PermitInvalidation);
+
 			KeyValuePair<string, object>[] Claims = await LoadClaims(Folder, ClaimsFile);
 			PersonalInformation PI = Create(Claims);
 
@@ -163,11 +180,10 @@ namespace TAG.Identity.TravelDocuments.Test
 			Assert.IsTrue(module!.Supports(Application) > Grade.NotAtAll);
 
 			double? Distance = await module.ValidateDistance(Application);
+			Console.Out.WriteLine(Distance?.ToString() ?? "Distance not available");
 
 			if (!Application.HasErrors)
 			{
-				Console.Out.WriteLine(Distance?.ToString() ?? "Distance not available");
-
 				Assert.AreEqual(0, Application.ValidatedClaims.Length, "Application has validated claims.");
 				Assert.AreEqual(1, Application.InvalidatedPhotos.Length, "Application has not invalidated photos.");
 				Assert.IsFalse(Application.HasValidatedClaims, "Application has validated claims.");
