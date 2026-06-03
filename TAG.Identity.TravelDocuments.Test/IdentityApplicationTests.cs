@@ -4,6 +4,7 @@ using System.Text;
 using System.Xml;
 using Waher.Content;
 using Waher.Content.Images;
+using Waher.Networking.Sniffers;
 using Waher.Persistence;
 using Waher.Persistence.Files;
 using Waher.Persistence.Serialization;
@@ -91,9 +92,9 @@ namespace TAG.Identity.TravelDocuments.Test
 			PersonalInformation PI = Create(Claims);
 
 			IdentityApplication Application = new(
-				Guid.NewGuid().ToString() + "@example.org", 
+				Guid.NewGuid().ToString() + "@example.org",
 				"urn:nf:iot:leg:id:1.0", true, PI,
-				await LoadClaims(Folder,ClaimsFile),
+				await LoadClaims(Folder, ClaimsFile),
 				[
 					await LoadProfilePhoto(Folder, PhotoFile)
 				],
@@ -108,6 +109,7 @@ namespace TAG.Identity.TravelDocuments.Test
 		[TestMethod]
 		[DataRow("Passport01", "Claims.json", "ProfilePhoto.jpg", "NFC.xml")]
 		[DataRow("Passport02", "Claims.json", "ProfilePhoto.jpg", "NFC.xml")]
+		[DataRow("Passport03", "Claims.json", null, "NFC.xml")]
 		public async Task Test_02_Validate(string Folder, string ClaimsFile, string PhotoFile, string NfcFile)
 		{
 			KeyValuePair<string, object>[] Claims = await LoadClaims(Folder, ClaimsFile);
@@ -129,7 +131,7 @@ namespace TAG.Identity.TravelDocuments.Test
 
 			double? Distance = await module.ValidateDistance(Application);
 			Assert.IsFalse(Application.HasErrors, Application.FirstError?.ErrorMessage ?? "Unspecified error");
-		
+
 			Assert.IsTrue(Distance.HasValue, "Distance not evaluated.");
 			Console.Out.WriteLine(Distance.Value);
 
@@ -159,13 +161,13 @@ namespace TAG.Identity.TravelDocuments.Test
 		[DataRow("Passport01", "Claims.json", "PassportPhotoBlur.png", "NFC.xml", false, false)]
 		[DataRow("Passport01", "Claims.json", "ProfilePhoto.jpg", "NFC.xml", true, true)]
 		[DataRow("Passport02", "Claims.json", "ProfilePhoto.jpg", "NFC.xml", true, true)]
-		public async Task Test_03_Invalidate(string Folder, string ClaimsFile, string PhotoFile, 
+		public async Task Test_03_Invalidate(string Folder, string ClaimsFile, string PhotoFile,
 			string NfcFile, bool PermitInvalidation, bool RequireRecentPhoto)
 		{
-			await RuntimeSettings.SetAsync(typeof(ServiceModule).Namespace + ".PermitInvalidation", 
+			await RuntimeSettings.SetAsync(typeof(ServiceModule).Namespace + ".PermitInvalidation",
 				PermitInvalidation);
 
-			await RuntimeSettings.SetAsync(typeof(ServiceModule).Namespace + ".RequireRecentPhoto", 
+			await RuntimeSettings.SetAsync(typeof(ServiceModule).Namespace + ".RequireRecentPhoto",
 				RequireRecentPhoto);
 
 			KeyValuePair<string, object>[] Claims = await LoadClaims(Folder, ClaimsFile);
@@ -196,6 +198,31 @@ namespace TAG.Identity.TravelDocuments.Test
 				Assert.IsFalse(Application.HasValidatedPhotos, "Application has validated photos.");
 				Assert.IsFalse(Application.IsValid, "Application is valid.");
 			}
+		}
+
+		[TestMethod]
+		[DataRow("Passport03", "Claims.json", "NFC.xml")]
+		public async Task Test_04_ReadNfc(string Folder, string ClaimsFile, string NfcFile)
+		{
+			KeyValuePair<string, object>[] Claims = await LoadClaims(Folder, ClaimsFile);
+			string? PreviewId = null;
+
+			foreach (KeyValuePair<string, object> P in Claims)
+			{
+				if (P.Key == PersonalInformation.PreviewTag)
+				{
+					PreviewId = P.Value?.ToString();
+					break;
+				}
+			}
+
+			if (string.IsNullOrEmpty(PreviewId))
+				Assert.Fail("Preview ID not found in claims.");
+
+			XmlDocument Nfc = LoadDocument(Folder, NfcFile);
+
+			Assert.IsTrue(await ServiceModule.ValidateNfcCommunication(PreviewId, Nfc,
+				new ConsoleOutSniffer(BinaryPresentationMethod.Hexadecimal, LineEnding.NewLine)));
 		}
 
 		private static string GetPath(string Folder, string FileName)

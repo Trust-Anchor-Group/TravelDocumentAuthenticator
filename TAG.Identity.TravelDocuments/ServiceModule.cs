@@ -246,25 +246,33 @@ namespace TAG.Identity.TravelDocuments
 					Doc.DocumentElement.LocalName == "SnifferOutput" &&
 					Doc.DocumentElement.NamespaceURI == "http://waher.se/Schema/SnifferOutput.xsd")
 				{
-					IEnumerator e = Doc.DocumentElement.GetEnumerator();
+					DocumentInformation DocInfo = GetNfcDocument(Doc);
 
-					if (!e.MoveNext() ||
-						e.Current is not XmlElement E ||
-						E.LocalName != "Info")
-					{
-						continue;
-					}
-
-					string Mrz = IsoDepReplay.GetRows(E).Replace("\r\n", "\n").Replace('\r', '\n').Trim();
-
-					if (!MrzExtensions.ParseMrz(Mrz, out DocumentInformation DocInfo))
-						continue;
-
-					return new KeyValuePair<XmlDocument, DocumentInformation>(Doc, DocInfo);
+					if (DocInfo is not null)
+						return new KeyValuePair<XmlDocument, DocumentInformation>(Doc, DocInfo);
 				}
 			}
 
 			return new KeyValuePair<XmlDocument, DocumentInformation>(null, null);
+		}
+
+		private static DocumentInformation GetNfcDocument(XmlDocument Doc)
+		{
+			IEnumerator e = Doc.DocumentElement.GetEnumerator();
+
+			if (!e.MoveNext() ||
+				e.Current is not XmlElement E ||
+				E.LocalName != "Info")
+			{
+				return null;
+			}
+
+			string Mrz = IsoDepReplay.GetRows(E).Replace("\r\n", "\n").Replace('\r', '\n').Trim();
+
+			if (!MrzExtensions.ParseMrz(Mrz, out DocumentInformation DocInfo))
+				return null;
+
+			return DocInfo;
 		}
 
 		/// <summary>
@@ -476,7 +484,7 @@ namespace TAG.Identity.TravelDocuments
 
 									return null;
 								}
-								else if (Math.Abs(System.DateTime.Now.Subtract(DateTime.Value).TotalDays)>=1)
+								else if (Math.Abs(System.DateTime.Now.Subtract(DateTime.Value).TotalDays) >= 1)
 								{
 									this.InvalidatePhoto(Application, ProfilePhoto,
 										"Photo must be recent.", "en", "PhotoNotRecent",
@@ -956,6 +964,95 @@ namespace TAG.Identity.TravelDocuments
 			}
 		}
 
+		/// <summary>
+		/// Validates a recording of a communication session with a travel document.
+		/// </summary>
+		/// <param name="PreviewId">Preview ID.</param>
+		/// <param name="NfcCommunication">NFC recording.</param>
+		/// <param name="Sniffers">Optional sniffers.</param>
+		/// <returns>If communication represents a valid session or not.</returns>
+		public static async Task<bool> ValidateNfcCommunication(string PreviewId,
+			XmlDocument NfcCommunication, params ISniffer[] Sniffers)
+		{
+			SKBitmap TravelDocumentFaceBitmap = null;
+
+			if (NfcCommunication is null)
+				return false;
+
+			try
+			{
+				DocumentInformation DocInfo = GetNfcDocument(NfcCommunication);
+				Representation TravelDocumentFace = null;
+				AdditionalPersonalDetails AdditionalDetails = null;
+
+				if (DocInfo is null)
+					return false;
+
+				// Validate NFC replay document.
+
+				IsoDepReplay Replay = new(NfcCommunication);
+				byte[] LocalKeySeed = PreviewId == "TEST" ? null : Encoding.UTF8.GetBytes(PreviewId);
+				using TravelDocumentsClient Client = new(Replay, Replay.DocumentInfo, LocalKeySeed, Sniffers);
+
+				AuthenticateResult AuthResult = await Client.Authenticate();
+				if (AuthResult != AuthenticateResult.Success)
+					return false;
+
+				DocumentInformation DocInfo2 = null;
+
+				Client.MrzUpdated += (_, e) =>
+				{
+					DocInfo2 = Client.Mrz.DocumentInformation;
+					return Task.CompletedTask;
+				};
+
+				Client.BiometricEncodingFaceUpdated += (_, e) =>
+				{
+					if (Client.BiometricEncodingFace is not null)
+						TravelDocumentFace = Client.BiometricEncodingFace[0].BiometricDataBlock?.Record?.Representations[0];
+
+					return Task.CompletedTask;
+				};
+
+				Client.PersonalInformationUpdated += (_, e) =>
+				{
+					AdditionalDetails = Client.PersonalInformation;
+					return Task.CompletedTask;
+				};
+
+				string OnboardingNeuron = await RuntimeSettings.GetAsync("Onboarding.DomainName", "id.tagroot.io");
+
+				ReadTravelDocumentResult Result = await Client.ReadTravelDocument(OnboardingNeuron);
+				if (Result != ReadTravelDocumentResult.Success)
+					return false;
+
+				if (DocInfo is null)
+					return false;
+
+				if (DocInfo.MRZ_Information.Replace("\n", string.Empty).Replace("\r", string.Empty) !=
+					DocInfo2.MRZ_Information.Replace("\n", string.Empty).Replace("\r", string.Empty))
+				{
+					return false;
+				}
+
+				if (TravelDocumentFace is null)
+					return false;
+
+				InterleavedImage TravelDocumentImage = J2kImage.FromBytes(TravelDocumentFace.ImageData);
+				TravelDocumentFaceBitmap = TravelDocumentImage.As<SKBitmap>();
+
+				return false;
+			}
+			catch (Exception)
+			{
+				return false;
+			}
+			finally
+			{
+				TravelDocumentFaceBitmap?.Dispose();
+			}
+		}
+
 		private void InvalidateClaim(IIdentityApplication Application, string Claim,
 			string Error, string ErrorLanguage, string ErrorCode, bool PermitInvalidation)
 		{
@@ -1218,7 +1315,7 @@ namespace TAG.Identity.TravelDocuments
 			double LifeCycleDays = await RuntimeSettings.GetAsync(typeof(ServiceModule).Namespace + ".LifeCycleDays", 3652.0);
 			DateTime Expires = DateTime.UtcNow.Date.AddDays(Math.Round(LifeCycleDays));
 
-			await PersistedHashes.AddHash(Expires, Hash);	// Makes sure hash is available in hash store. Only adds record if one is not already added.
+			await PersistedHashes.AddHash(Expires, Hash);   // Makes sure hash is available in hash store. Only adds record if one is not already added.
 		}
 
 		#endregion
