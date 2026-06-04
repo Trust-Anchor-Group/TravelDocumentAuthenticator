@@ -12,6 +12,7 @@ using Waher.Runtime.Inventory;
 using Waher.Runtime.IO;
 using Waher.Runtime.Settings;
 using Waher.Script;
+using Waher.Security.EllipticCurves;
 
 namespace TAG.Identity.TravelDocuments.Test
 {
@@ -36,7 +37,8 @@ namespace TAG.Identity.TravelDocuments.Test
 				typeof(FilesProvider).Assembly,
 				typeof(ObjectSerializer).Assembly,
 				typeof(RuntimeSettings).Assembly,
-				typeof(Expression).Assembly);
+				typeof(Expression).Assembly,
+				typeof(EllipticCurve).Assembly);
 
 			if (!Database.HasProvider)
 			{
