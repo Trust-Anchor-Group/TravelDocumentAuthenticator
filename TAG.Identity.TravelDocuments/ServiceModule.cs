@@ -13,6 +13,7 @@ using System.IO;
 using System.Text;
 using System.Threading.Tasks;
 using System.Xml;
+using TAG.Identity.TravelDocuments;
 using TAG.Identity.TravelDocuments.Data;
 using TAG.Networking.DeepFace;
 using Waher.Content;
@@ -21,6 +22,7 @@ using Waher.Content.Images.Exif;
 using Waher.Content.Xml;
 using Waher.Events;
 using Waher.IoTGateway;
+using Waher.Layout.Layout2D.Model;
 using Waher.Networking;
 using Waher.Networking.HTTP;
 using Waher.Networking.Sniffers;
@@ -29,6 +31,7 @@ using Waher.Runtime.HashStore;
 using Waher.Runtime.Inventory;
 using Waher.Runtime.Settings;
 using Waher.Security;
+using static System.Net.Mime.MediaTypeNames;
 
 namespace TAG.Identity.TravelDocuments
 {
@@ -128,6 +131,71 @@ namespace TAG.Identity.TravelDocuments
 		#endregion
 
 		#region IIdentityAuthenticatorService
+
+		/// <summary>
+		/// ID of service provider.
+		/// </summary>
+		public string Id => typeof(ServiceModule).Namespace;
+
+		/// <summary>
+		/// Displayable name of service provider.
+		/// </summary>
+		public string Name => "ICAO eMRTD Identity Authenticator";
+
+		/// <summary>
+		/// Optional URL to icon of service provider.
+		/// </summary>
+		public string IconUrl => string.Empty;
+
+		/// <summary>
+		/// Width of icon, if available.
+		/// </summary>
+		public int IconWidth => 0;
+
+		/// <summary>
+		/// Height of icon, if available.
+		/// </summary>
+		public int IconHeight => 0;
+
+		/// <summary>
+		/// Required properties for the identity authenticator service.
+		/// </summary>
+		public string[] RequiredProperties =>
+		[
+			PersonalInformation.PreviewTag,
+			PersonalInformation.FirstNameTag,
+			PersonalInformation.LastNamesTag,
+			PersonalInformation.CountryTag
+		];
+
+		/// <summary>
+		/// Optional properties for the identity authenticator service.
+		/// </summary>
+		public string[] OptionalProperties =>
+		[
+			PersonalInformation.MiddleNamesTag,
+			PersonalInformation.BirthDayTag,
+			PersonalInformation.BirthMonthTag,
+			PersonalInformation.BirthYearTag,
+			PersonalInformation.AgeAboveTag,
+			PersonalInformation.GenderTag,
+			PersonalInformation.NationalityTag,
+			PersonalInformation.PersonalNumberTag
+		];
+
+		/// <summary>
+		/// Required attachments for the identity authenticator service.
+		/// </summary>
+		public string[] RequiredAttachments =>
+		[
+			"ProfilePhoto",
+			"NFC"
+		];
+
+		/// <summary>
+		/// Optional attachments for the identity authenticator service.
+		/// </summary>
+		public string[] OptionalAttachments => [];
 
 		/// <summary>
 		/// If the interface understands objects such as <paramref name="Object"/>.
