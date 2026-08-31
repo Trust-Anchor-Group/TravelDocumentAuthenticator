@@ -13,7 +13,6 @@ using System.IO;
 using System.Text;
 using System.Threading.Tasks;
 using System.Xml;
-using TAG.Identity.TravelDocuments;
 using TAG.Identity.TravelDocuments.Data;
 using TAG.Networking.DeepFace;
 using Waher.Content;
@@ -22,7 +21,6 @@ using Waher.Content.Images.Exif;
 using Waher.Content.Xml;
 using Waher.Events;
 using Waher.IoTGateway;
-using Waher.Layout.Layout2D.Model;
 using Waher.Networking;
 using Waher.Networking.HTTP;
 using Waher.Networking.Sniffers;
@@ -31,7 +29,6 @@ using Waher.Runtime.HashStore;
 using Waher.Runtime.Inventory;
 using Waher.Runtime.Settings;
 using Waher.Security;
-using static System.Net.Mime.MediaTypeNames;
 
 namespace TAG.Identity.TravelDocuments
 {
