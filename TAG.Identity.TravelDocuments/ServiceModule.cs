@@ -434,8 +434,9 @@ namespace TAG.Identity.TravelDocuments
 						return null;
 					}
 
-					InterleavedImage TravelDocumentImage = J2kImage.FromBytes(TravelDocumentFace.ImageData);
-					TravelDocumentFaceBitmap = TravelDocumentImage.As<SKBitmap>();
+					TravelDocumentFaceBitmap = TravelDocumentFace.ImageDataType == ImageDataType.Jpeg
+						? SKBitmap.Decode(TravelDocumentFace.ImageData) ?? throw new InvalidDataException("Unable to decode JPEG passport portrait.")
+						: J2kImage.FromBytes(TravelDocumentFace.ImageData).As<SKBitmap>();
 				}
 				catch (Exception ex)
 				{
@@ -1059,8 +1060,9 @@ namespace TAG.Identity.TravelDocuments
 				if (TravelDocumentFace is null)
 					return false;
 
-				InterleavedImage TravelDocumentImage = J2kImage.FromBytes(TravelDocumentFace.ImageData);
-				TravelDocumentFaceBitmap = TravelDocumentImage.As<SKBitmap>();
+				TravelDocumentFaceBitmap = TravelDocumentFace.ImageDataType == ImageDataType.Jpeg
+					? SKBitmap.Decode(TravelDocumentFace.ImageData) ?? throw new InvalidDataException("Unable to decode JPEG passport portrait.")
+					: J2kImage.FromBytes(TravelDocumentFace.ImageData).As<SKBitmap>();
 
 				return true;
 			}
