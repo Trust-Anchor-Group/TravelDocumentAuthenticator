@@ -434,9 +434,7 @@ namespace TAG.Identity.TravelDocuments
 						return null;
 					}
 
-					TravelDocumentFaceBitmap = TravelDocumentFace.ImageDataType == ImageDataType.Jpeg
-						? SKBitmap.Decode(TravelDocumentFace.ImageData) ?? throw new InvalidDataException("Unable to decode JPEG passport portrait.")
-						: J2kImage.FromBytes(TravelDocumentFace.ImageData).As<SKBitmap>();
+					TravelDocumentFaceBitmap = DecodeTravelDocumentFace(TravelDocumentFace);
 				}
 				catch (Exception ex)
 				{
@@ -1060,9 +1058,7 @@ namespace TAG.Identity.TravelDocuments
 				if (TravelDocumentFace is null)
 					return false;
 
-				TravelDocumentFaceBitmap = TravelDocumentFace.ImageDataType == ImageDataType.Jpeg
-					? SKBitmap.Decode(TravelDocumentFace.ImageData) ?? throw new InvalidDataException("Unable to decode JPEG passport portrait.")
-					: J2kImage.FromBytes(TravelDocumentFace.ImageData).As<SKBitmap>();
+				TravelDocumentFaceBitmap = DecodeTravelDocumentFace(TravelDocumentFace);
 
 				return true;
 			}
@@ -1073,6 +1069,23 @@ namespace TAG.Identity.TravelDocuments
 			finally
 			{
 				TravelDocumentFaceBitmap?.Dispose();
+			}
+		}
+
+		private static SKBitmap DecodeTravelDocumentFace(Representation TravelDocumentFace)
+		{
+			byte[] ImageData = TravelDocumentFace.ImageData;
+			bool Jpeg = TravelDocumentFace.ImageDataType == ImageDataType.Jpeg;
+
+			try
+			{
+				return (Jpeg ? SKBitmap.Decode(ImageData) : J2kImage.FromBytes(ImageData).As<SKBitmap>())
+					?? throw new InvalidDataException("Unable to decode passport portrait.");
+			}
+			catch (Exception)
+			{
+				return (Jpeg ? J2kImage.FromBytes(ImageData).As<SKBitmap>() : SKBitmap.Decode(ImageData))
+					?? throw new InvalidDataException("Unable to decode passport portrait.");
 			}
 		}
 
