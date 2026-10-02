@@ -7,10 +7,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="SkiaSharp" Version="4.151.1" />
-    <PackageReference Include="Waher.Content" Version="3.6.3" />
+    <PackageReference Include="SkiaSharp" Version="4.153.1" />
+    <PackageReference Include="Waher.Content" Version="3.6.4" />
     <PackageReference Include="Waher.Content.Images" Version="3.2.0" />
-    <PackageReference Include="Waher.Networking" Version="4.6.8" />
+    <PackageReference Include="Waher.Networking" Version="4.7.0" />
   </ItemGroup>
 
 </Project>

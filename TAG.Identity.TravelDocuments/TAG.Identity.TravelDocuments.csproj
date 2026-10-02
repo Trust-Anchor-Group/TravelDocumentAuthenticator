@@ -46,14 +46,14 @@
   <ItemGroup>
     <PackageReference Include="CoreJ2K" Version="2.3.3.91" />
     <PackageReference Include="CoreJ2K.Skia" Version="2.3.3.91" />
-    <PackageReference Include="Paiwise" Version="3.7.0" />
-    <PackageReference Include="SkiaSharp" Version="4.151.1" />
-    <PackageReference Include="Waher.Content" Version="3.6.3" />
-    <PackageReference Include="Waher.Content.Xml" Version="3.1.7" />
+    <PackageReference Include="Paiwise" Version="3.8.0" />
+    <PackageReference Include="SkiaSharp" Version="4.153.1" />
+    <PackageReference Include="Waher.Content" Version="3.6.4" />
+    <PackageReference Include="Waher.Content.Xml" Version="3.2.0" />
     <PackageReference Include="Waher.Events" Version="1.4.7" />
-    <PackageReference Include="Waher.IoTGateway" Version="3.10.2" />
-    <PackageReference Include="Waher.Mcp.Xmpp" Version="1.0.1" />
-    <PackageReference Include="Waher.Networking" Version="4.6.8" />
+    <PackageReference Include="Waher.IoTGateway" Version="3.11.0" />
+    <PackageReference Include="Waher.Mcp.Xmpp" Version="1.0.2" />
+    <PackageReference Include="Waher.Networking" Version="4.7.0" />
     <PackageReference Include="Waher.Runtime.HashStore" Version="1.0.3" />
     <PackageReference Include="Waher.Runtime.Inventory" Version="1.4.6" />
     <PackageReference Include="Waher.Runtime.Settings" Version="1.2.2" />
